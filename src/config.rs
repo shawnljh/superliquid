@@ -5,6 +5,8 @@ use std::collections::HashSet;
 use std::env;
 use std::time::Duration;
 
+//***/// Loads config from .env file
+
 pub(crate) fn retrieve_verifying_key(node_id: usize) -> VerifyingKey {
     dotenv().ok();
     let env_key = format!("PUBLIC_KEY_{}", node_id);
@@ -27,7 +29,7 @@ pub(crate) fn retrieve_signing_key_checked(node_id: usize) -> SigningKey {
     let sk = retrieve_signing_key(node_id);
     let vk = retrieve_verifying_key(node_id);
     assert_eq!(sk.verifying_key().as_bytes(), vk.as_bytes());
-    return sk;
+    sk
 }
 
 pub fn retrieve_num_validators() -> usize {
@@ -92,5 +94,5 @@ pub fn retrieve_multiplicative_factor() -> f32 {
     env::var("MULTIPLICATIVE_FACTOR")
         .expect("multiplicative factor not set")
         .parse::<f32>()
-        .expect("multiplicative factorTICK_DURATION must be a number")
+        .expect("multiplicative factor must be a float")
 }

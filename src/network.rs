@@ -59,9 +59,7 @@ where
 
             Ok(Some(parsed))
         }
-        None => {
-            return Ok(None);
-        }
+        None => Ok(None),
     }
 }
 

@@ -70,12 +70,12 @@ pub(crate) async fn deduplicate_peer_connection(
                 "Info",
                 &format!("Deduplicated TCP stream with peer: {:?}", peer_id),
             );
-            return stream.clone();
+            stream.clone()
         }
         None => {
             let stream_clone = stream.clone();
             peer_connections.insert(peer_id, stream_clone);
-            return stream.clone();
+            stream.clone()
         }
     }
 }

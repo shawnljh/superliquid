@@ -1,12 +1,13 @@
-use super::{
-    crypto::QuorumCertificate, message::HotStuffMessage, message_window::MessageWindow,
-    replica::ViewNumber,
-};
+use crate::types::consensus::ViewNumber;
+
+use super::{crypto::QuorumCertificate, message::HotStuffMessage};
 
 use ed25519::Signature;
 use hex::{decode as hex_decode, encode as hex_encode};
 
-pub fn get_highest_qc_from_votes<'a>(votes: &'a MessageWindow) -> Option<&'a QuorumCertificate> {
+pub fn get_highest_qc_from_votes<'a>(
+    votes: &Vec<&'a HotStuffMessage>,
+) -> Option<&'a QuorumCertificate> {
     votes
         .iter()
         .filter_map(|msg| match msg {
@@ -17,7 +18,7 @@ pub fn get_highest_qc_from_votes<'a>(votes: &'a MessageWindow) -> Option<&'a Quo
 }
 
 pub(crate) fn has_quorum_votes_for_view(
-    messages: Option<&Vec<HotStuffMessage>>,
+    messages: Option<Vec<&HotStuffMessage>>,
     curr_view: ViewNumber,
     quorum_threhold: usize,
 ) -> bool {
@@ -28,22 +29,6 @@ pub(crate) fn has_quorum_votes_for_view(
     return msgs
         .iter()
         .filter(|m| matches!(m, HotStuffMessage::Vote { view, .. } if *view == curr_view))
-        .count()
-        >= quorum_threhold;
-}
-
-pub(crate) fn has_quorum_for_new_view(
-    messages: Option<&Vec<HotStuffMessage>>,
-    curr_view: ViewNumber,
-    quorum_threhold: usize,
-) -> bool {
-    let Some(msgs) = messages else {
-        return false;
-    };
-
-    return msgs
-        .iter()
-        .filter(|m| matches!(m, HotStuffMessage::NewView { view, .. } if *view == curr_view))
         .count()
         >= quorum_threhold;
 }

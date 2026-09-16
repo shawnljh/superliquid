@@ -108,7 +108,7 @@ fn parse_price_to_multiple(price: f64, tick_size: u32, tick_decimals: u8) -> Opt
     let factor = 10u64.pow(tick_decimals as u32) as f64;
     let raw_units = (price * factor).round() as u64;
     let tick_size = tick_size as u64;
-    if raw_units % tick_size != 0 {
+    if !raw_units.is_multiple_of(tick_size) {
         None // not an exact multiple
     } else {
         Some(raw_units / tick_size)
@@ -167,7 +167,7 @@ fn display_spot_balances(asset_infos: &Vec<Asset>, spot_balance: AccountBalance)
 fn display_spot_markets(markets_info: &Vec<MarketInfo>) {
     println!("Spot Markets:");
     for market in markets_info {
-        let market_name = format!("{}", market.market_name).blue();
+        let market_name = market.market_name.to_string().blue();
         let market_id = format!("{}", market.market_id).blue();
         println!("{}, id: {}", market_name, market_id);
     }

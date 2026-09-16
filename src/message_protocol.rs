@@ -66,19 +66,15 @@ pub async fn send_hello(
     peer_id: PeerId,
 ) -> Result<()> {
     let msg = ControlMessage::Hello { peer_id };
-    send_message(writer, &&Message::Connection(msg)).await?;
+    send_message(writer, &Message::Connection(msg)).await?;
 
     let msg = receive_message(reader).await?;
     match msg {
-        None | Some(Message::Application(AppMessage::Ack)) => {
-            return Ok(());
-        }
-        Some(other) => {
-            return Err(Error::new(
-                ErrorKind::InvalidData,
-                format!("Expected Ack or None, got {:?}", other),
-            ));
-        }
+        None | Some(Message::Application(AppMessage::Ack)) => Ok(()),
+        Some(other) => Err(Error::new(
+            ErrorKind::InvalidData,
+            format!("Expected Ack or None, got {:?}", other),
+        )),
     }
 }
 

@@ -5,9 +5,9 @@ use ed25519_dalek::VerifyingKey;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
-use crate::types::transaction::Sha256Hash;
+use crate::types::{consensus::ViewNumber, transaction::Sha256Hash};
 
-use super::{block::BlockHash, hexstring, replica::ViewNumber};
+use super::{block::BlockHash, hexstring};
 
 pub type PartialSigHash = Sha256Hash;
 pub type QuorumCertificateHash = Sha256Hash;
@@ -68,7 +68,7 @@ pub struct QuorumCertificate {
     pub(crate) view_number: ViewNumber,
     pub(crate) block_hash: BlockHash,
     pub(crate) message_hash: Sha256Hash,
-    pub(crate) partial_sigs: Vec<PartialSig>,
+    pub(crate) partial_sigs: Vec<PartialSig>, // Signatures forming the QC
 }
 
 impl QuorumCertificate {
@@ -132,7 +132,7 @@ impl QuorumCertificate {
                 valid_sig_count += 1;
             } else {
                 println!(
-                    "Not valid leh {:?} {:?}. pk: {:?}",
+                    "Not valid {:?} {:?}. pk: {:?}",
                     &self.message_hash, &sig.signature, pk,
                 )
             }
@@ -164,11 +164,21 @@ mod tests {
     use ed25519_dalek::SigningKey;
 
     use crate::{
-        hotstuff::{crypto::PartialSig, replica::ViewNumber},
-        types::transaction::Sha256Hash,
+        hotstuff::crypto::PartialSig,
+        types::{consensus::ViewNumber, transaction::Sha256Hash},
     };
 
     use super::QuorumCertificate;
+
+    impl PartialSig {
+        pub fn mock(seed: u8) -> Self {
+            let mut signing_key = SigningKey::from_bytes(&[seed; 32]);
+            let verifying_key = signing_key.verifying_key();
+            let signature = signing_key.sign(&[0u8; 32]);
+
+            PartialSig::new(verifying_key, signature)
+        }
+    }
 
     impl QuorumCertificate {
         pub fn mock(view_number: ViewNumber) -> Self {

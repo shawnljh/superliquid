@@ -12,11 +12,12 @@ use tokio::{
 
 use crate::{
     config,
-    hotstuff::utils,
+    hotstuff::{message::Phase, utils},
     node::client::handler::QueryRequest,
     replica_debug, replica_log,
     state::state::LedgerState,
     types::{
+        consensus::ViewNumber,
         message::{ReplicaInBound, ReplicaOutbound},
         transaction::{PublicKeyHash, Sha256Hash, SignedTransaction},
     },
@@ -32,7 +33,6 @@ use super::{
     replica_sender::ReplicaSender,
 };
 
-pub type ViewNumber = u64;
 const BLOCK_TRANSACTION_LENGTH: usize = 16;
 
 struct ViewProgress {
@@ -103,7 +103,8 @@ impl HotStuffReplica {
             pending_transactions: HashMap::new(),
             committed_transactions: HashMap::new(),
 
-            messages: MessageWindow::new(0),
+            // TODO: pass in config
+            messages: MessageWindow::new(0, 100),
 
             pacemaker: Pacemaker::new(),
             rep_node_channel: ReplicaSender {
@@ -148,14 +149,16 @@ impl HotStuffReplica {
     /// Try to build QC(view) once any block‐hash has n‑f signatures.
     /// Returns None if no such QC exists yet.
     pub fn try_create_qc_for_view(&self, view: ViewNumber) -> Option<QuorumCertificate> {
-        let msgs = self.messages.get_messages_for_view(view)?;
+        let vote_msgs = &self
+            .messages
+            .get_phase_messages_for_view(view, Phase::Vote)?;
 
         // 2) Tally signatures by (block_hash → Vec<PartialSig>),
         //    verifying and deduplicating by signer.
         let mut seen: HashSet<PublicKeyHash> = HashSet::new();
         let mut tally: HashMap<(BlockHash, Sha256Hash), Vec<&PartialSig>> = HashMap::new();
 
-        for message in msgs {
+        for message in vote_msgs {
             match message {
                 HotStuffMessage::Vote {
                     partial_sig, node, ..
@@ -223,14 +226,12 @@ impl HotStuffReplica {
     }
 
     fn leader_create_message(&mut self, new_block: Block) -> HotStuffMessage {
-        let outbound_msg = HotStuffMessage::create_proposal(
+        HotStuffMessage::create_proposal(
             new_block,
             self.pacemaker.curr_view,
             self.node_id,
             self.pacemaker.curr_view,
-        );
-
-        return outbound_msg;
+        )
     }
 
     fn get_justified_block(&self, block: &Block) -> Option<Arc<RwLock<Block>>> {
@@ -297,13 +298,13 @@ impl HotStuffReplica {
 
         self.pacemaker.reset_timer();
 
-        let is_new_view = utils::has_quorum_for_new_view(
-            self.messages.get_messages_for_view(curr_view - 1),
-            self.pacemaker.curr_view - 1,
-            self.quorum_threshold(),
-        );
+        let view_messages = self
+            .messages
+            .get_phase_messages_for_view(curr_view, Phase::NewView);
 
-        if is_new_view {
+        if let Some(msgs) = view_messages
+            && msgs.len() >= self.quorum_threshold()
+        {
             replica_log!(
                 self.node_id,
                 "Leader handle new view (Prepare), view num: {:?}",
@@ -312,7 +313,7 @@ impl HotStuffReplica {
 
             if self.generic_qc.view_number != curr_view - 1 {
                 // msgs should only contain justify if next-view interupt is triggered
-                match utils::get_highest_qc_from_votes(&self.messages) {
+                match utils::get_highest_qc_from_votes(&msgs) {
                     Some(high_qc) => {
                         if high_qc.view_number > self.generic_qc.view_number {
                             // update generic qc if replica falls behind
@@ -365,7 +366,8 @@ impl HotStuffReplica {
         // is not new view
 
         let has_quorum_votes = utils::has_quorum_votes_for_view(
-            self.messages.get_messages_for_view(curr_view - 1),
+            self.messages
+                .get_phase_messages_for_view(curr_view - 1, Phase::Vote),
             self.pacemaker.curr_view - 1,
             self.quorum_threshold(),
         );
@@ -547,7 +549,8 @@ impl HotStuffReplica {
         }
 
         if !utils::has_quorum_votes_for_view(
-            self.messages.get_messages_for_view(curr_view),
+            self.messages
+                .get_phase_messages_for_view(curr_view, Phase::Vote),
             curr_view,
             self.quorum_threshold(),
         ) {

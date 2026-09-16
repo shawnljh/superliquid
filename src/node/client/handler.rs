@@ -103,7 +103,7 @@ pub(super) async fn send_query_to_replica(
     let response = response_rx
         .await
         .map_err(|e| mpsc_error("Failed to recieve response from replica", e))?;
-    return Ok(response);
+    Ok(response)
 }
 
 pub(super) async fn handle_account_query(
@@ -279,7 +279,7 @@ pub(crate) async fn handle_transaction(
     }
     logger.log("info", &format!("Received Transaction: {:?}", signed_tx));
 
-    broadcast_transaction(&node, signed_tx.clone()).await?;
+    broadcast_transaction(node, signed_tx.clone()).await?;
     to_replica_tx
         .send(ReplicaInBound::Transaction(signed_tx))
         .await
@@ -301,5 +301,5 @@ pub(super) async fn handle_query(
         let transactions = node.transactions.lock().await;
         transactions.clone()
     };
-    message_protocol::send_message(writer, &&Message::Application(AppMessage::Response(txs))).await
+    message_protocol::send_message(writer, &Message::Application(AppMessage::Response(txs))).await
 }

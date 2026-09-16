@@ -1,4 +1,3 @@
-use crate::{node::state::PeerId, types::transaction::Sha256Hash};
 use ed25519::signature::SignerMut;
 use ed25519_dalek::SigningKey;
 use serde::{Deserialize, Serialize};
@@ -7,7 +6,10 @@ use sha2::{Digest, Sha256};
 use super::{
     block::{Block, BlockHash},
     crypto::{PartialSig, QuorumCertificate, QuorumCertificateHash},
-    replica::ViewNumber,
+};
+use crate::{
+    node::state::PeerId,
+    types::{consensus::ViewNumber, transaction::Sha256Hash},
 };
 
 pub struct UnsignedVote<'a> {
@@ -26,6 +28,13 @@ impl<'a> UnsignedVote<'a> {
         let encoded = bincode::serialize(&hashable).unwrap();
         Sha256::digest(&encoded).into()
     }
+}
+
+#[derive(Debug, Clone)]
+pub enum Phase {
+    Proposal,
+    Vote,
+    NewView,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
@@ -51,7 +60,7 @@ pub enum HotStuffMessage {
     },
 }
 
-// Hashable message should only contain these two f
+// Hashable message should only contain these two fields
 #[derive(Serialize, Deserialize)]
 pub struct HashableMessage {
     view_number: ViewNumber,
@@ -107,7 +116,7 @@ impl HotStuffMessage {
 
         HotStuffMessage::Vote {
             node,
-            partial_sig: partial_sig,
+            partial_sig,
             view,
             sender,
             sender_view,

@@ -78,7 +78,7 @@ impl SpotMarket {
             tick,
             tick_decimals,
             last_executed_price: None,
-            base_asset_name: base_asset_name,
+            base_asset_name,
             quote_asset_name: quote_asset_name.to_string(),
         }
     }
@@ -273,7 +273,7 @@ impl SpotMarket {
                             to_drain_end_index += 1;
                         }
 
-                        if remaining_base_amount <= 0 {
+                        if remaining_base_amount == 0 {
                             if curr_filled_base_amount < order_remaining {
                                 // Partial fill
                                 residual_order = Some(ResidualOrder {
@@ -385,7 +385,7 @@ impl SpotMarket {
                         to_drain_end_index += 1;
                     }
 
-                    if remaining_base_lots <= 0 {
+                    if remaining_base_lots == 0 {
                         if reduce_base < order_base_remaining {
                             // residual order
                             residual_order = Some(ResidualOrder {
@@ -420,7 +420,7 @@ impl SpotMarket {
                     to_drain_end_index += 1;
                 }
 
-                if remaining_base_lots <= 0 {
+                if remaining_base_lots == 0 {
                     if filled_base_lots < order_base_remaining {
                         // Partial fill
 
@@ -508,7 +508,7 @@ impl SpotMarket {
                         to_drain_end_index += 1;
                     }
 
-                    if remaining_base_lots <= 0 {
+                    if remaining_base_lots == 0 {
                         if reduce < order_remaining {
                             // Residual order
                             maker_partial_fill = Some(ResidualOrder {
@@ -538,7 +538,7 @@ impl SpotMarket {
                     to_drain_end_index += 1;
                 }
 
-                if remaining_base_lots <= 0 {
+                if remaining_base_lots == 0 {
                     if filled_base_lots < order_remaining {
                         // Residual order
                         maker_partial_fill = Some(ResidualOrder {

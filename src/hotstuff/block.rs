@@ -4,14 +4,14 @@ use std::{
     vec,
 };
 
-use crate::types::transaction::{Sha256Hash, SignedTransaction};
+use crate::types::{
+    consensus::ViewNumber,
+    transaction::{Sha256Hash, SignedTransaction},
+};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
-use super::{
-    crypto::{self, QuorumCertificate},
-    replica::ViewNumber,
-};
+use super::crypto::{self, QuorumCertificate};
 
 pub type BlockHash = Sha256Hash;
 
@@ -48,13 +48,13 @@ impl Block {
         view_number: ViewNumber,
         justify: QuorumCertificate,
     ) -> Self {
-        return Self::Normal {
+        Self::Normal {
             parent_id: parent.hash(),
             view_number,
             justify,
             merkle_root: Self::hash_transactions(&transactions),
-            transactions: transactions,
-        };
+            transactions,
+        }
     }
 
     pub fn extends_from(
@@ -188,6 +188,17 @@ impl Block {
 mod tests {
     use super::*;
     use sha2::{Digest, Sha256};
+
+    impl Block {
+        pub fn mock(view_number: ViewNumber) -> Self {
+            Block::Genesis {
+                transactions: vec![],
+                view_number,
+                justify: QuorumCertificate::mock(view_number),
+                merkle_root: Sha256Hash::default(),
+            }
+        }
+    }
 
     fn hash(data: &[u8]) -> [u8; 32] {
         Sha256::digest(data).into()

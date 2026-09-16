@@ -3,9 +3,9 @@ use std::{
     time::{Duration, Instant},
 };
 
-use crate::{config, pacemaker_log};
+use crate::{config, pacemaker_log, types::consensus::ViewNumber};
 
-use super::{crypto::QuorumCertificate, replica::ViewNumber};
+use super::crypto::QuorumCertificate;
 
 pub struct Pacemaker {
     pub curr_view: ViewNumber,
@@ -114,7 +114,7 @@ mod tests {
     #[test]
     fn test_should_advance_view_false_initially() {
         let pacemaker = Pacemaker::new();
-        assert_eq!(pacemaker.should_advance_view(), false);
+        assert!(!pacemaker.should_advance_view());
     }
 
     #[test]
@@ -122,7 +122,7 @@ mod tests {
         let pacemaker = Pacemaker::new();
         // simulate passage of time
         sleep(pacemaker.timeout + std::time::Duration::from_millis(10));
-        assert_eq!(pacemaker.should_advance_view(), true);
+        assert!(pacemaker.should_advance_view());
     }
 
     #[test]
@@ -207,12 +207,12 @@ mod tests {
         pacemaker.last_commited_view = 0;
 
         // Initially, it should not advance (timeout hasn't passed)
-        assert_eq!(pacemaker.should_advance_view(), false);
+        assert!(!pacemaker.should_advance_view());
 
         // Wait long enough to exceed the exponential backoff timeout
         // Timeout = base * 2^(2 - 0) = 20ms * 4 = 80ms
         std::thread::sleep(Duration::from_millis(85));
 
-        assert_eq!(pacemaker.should_advance_view(), true);
+        assert!(pacemaker.should_advance_view());
     }
 }
