@@ -109,9 +109,9 @@ impl Block {
                 let mut buf = [0u8; 64];
                 buf[..32].copy_from_slice(&hashes[i]);
                 buf[32..].copy_from_slice(&hashes[i + 1]);
-                hashes[i / 2] = Sha256::digest(&buf).into();
+                hashes[i / 2] = Sha256::digest(buf).into();
             }
-            len = (len + 1) / 2;
+            len = len.div_ceil(2);
 
             if len % 2 == 1 && len > 1 {
                 hashes[len] = hashes[len - 1]; // safe only if hashes has enough capacity
@@ -122,8 +122,8 @@ impl Block {
         hashes[0]
     }
 
-    pub fn hash_transactions(transactions: &Vec<SignedTransaction>) -> Sha256Hash {
-        if transactions.len() == 0 {
+    pub fn hash_transactions(transactions: &[SignedTransaction]) -> Sha256Hash {
+        if transactions.is_empty() {
             return Sha256Hash::default();
         }
 
@@ -180,7 +180,7 @@ impl Block {
             transactions: vec![],
             merkle_root: Sha256Hash::default(),
         };
-        return (genesis, qc);
+        (genesis, qc)
     }
 }
 
@@ -228,9 +228,9 @@ mod tests {
         let root = Block::compute_merkle_root(vec![h1, h2, h3, h4]);
 
         // Manually compute
-        let l1: [u8; 32] = Sha256::digest(&[h1, h2].concat()).into();
-        let l2: [u8; 32] = Sha256::digest(&[h3, h4].concat()).into();
-        let expected_root: [u8; 32] = Sha256::digest(&[l1, l2].concat()).into();
+        let l1: [u8; 32] = Sha256::digest([h1, h2].concat()).into();
+        let l2: [u8; 32] = Sha256::digest([h3, h4].concat()).into();
+        let expected_root: [u8; 32] = Sha256::digest([l1, l2].concat()).into();
 
         assert_eq!(root, expected_root);
     }
@@ -244,9 +244,9 @@ mod tests {
         let root = Block::compute_merkle_root(vec![h1, h2, h3]);
 
         // After duplication, tree will be built on [h1, h2, h3, h3]
-        let l1: [u8; 32] = Sha256::digest(&[h1, h2].concat()).into();
-        let l2: [u8; 32] = Sha256::digest(&[h3, h3].concat()).into();
-        let expected_root: [u8; 32] = Sha256::digest(&[l1, l2].concat()).into();
+        let l1: [u8; 32] = Sha256::digest([h1, h2].concat()).into();
+        let l2: [u8; 32] = Sha256::digest([h3, h3].concat()).into();
+        let expected_root: [u8; 32] = Sha256::digest([l1, l2].concat()).into();
 
         assert_eq!(root, expected_root);
     }
@@ -263,13 +263,13 @@ mod tests {
 
         let root = Block::compute_merkle_root(vec![h1, h2, h3, h4, h5, h6, h7]);
 
-        let l1: [u8; 32] = Sha256::digest(&[h1, h2].concat()).into();
-        let l2: [u8; 32] = Sha256::digest(&[h3, h4].concat()).into();
-        let l3: [u8; 32] = Sha256::digest(&[h5, h6].concat()).into();
-        let l4: [u8; 32] = Sha256::digest(&[h7, h7].concat()).into();
-        let l5: [u8; 32] = Sha256::digest(&[l1, l2].concat()).into();
-        let l6: [u8; 32] = Sha256::digest(&[l3, l4].concat()).into();
-        let expected_root: [u8; 32] = Sha256::digest(&[l5, l6].concat()).into();
+        let l1: [u8; 32] = Sha256::digest([h1, h2].concat()).into();
+        let l2: [u8; 32] = Sha256::digest([h3, h4].concat()).into();
+        let l3: [u8; 32] = Sha256::digest([h5, h6].concat()).into();
+        let l4: [u8; 32] = Sha256::digest([h7, h7].concat()).into();
+        let l5: [u8; 32] = Sha256::digest([l1, l2].concat()).into();
+        let l6: [u8; 32] = Sha256::digest([l3, l4].concat()).into();
+        let expected_root: [u8; 32] = Sha256::digest([l5, l6].concat()).into();
 
         assert_eq!(root, expected_root);
     }
