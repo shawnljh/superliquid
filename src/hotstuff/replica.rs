@@ -159,39 +159,37 @@ impl HotStuffReplica {
         let mut tally: HashMap<(BlockHash, Sha256Hash), Vec<&PartialSig>> = HashMap::new();
 
         for message in vote_msgs {
-            match message {
-                HotStuffMessage::Vote {
-                    partial_sig, node, ..
-                } => {
-                    // a) signature must come from a known, unseen validator
-                    if !self.validator_set.contains(&partial_sig.signer_id) {
-                        continue;
-                    }
-
-                    let msg_hash = &message.hash();
-
-                    if partial_sig
-                        .signer_id
-                        .verify_strict(msg_hash, &partial_sig.signature)
-                        .is_err()
-                    {
-                        continue;
-                    }
-
-                    if !seen.insert(*partial_sig.signer_id.as_bytes()) {
-                        continue;
-                    }
-
-                    // b) extract the vote’s block hash
-                    let blockhash = node.hash();
-
-                    // ensure that quorum has same msg_hash
-                    tally
-                        .entry((blockhash, *msg_hash))
-                        .or_default()
-                        .push(partial_sig);
+            if let HotStuffMessage::Vote {
+                partial_sig, node, ..
+            } = message
+            {
+                // a) signature must come from a known, unseen validator
+                if !self.validator_set.contains(&partial_sig.signer_id) {
+                    continue;
                 }
-                _ => {}
+
+                let msg_hash = &message.hash();
+
+                if partial_sig
+                    .signer_id
+                    .verify_strict(msg_hash, &partial_sig.signature)
+                    .is_err()
+                {
+                    continue;
+                }
+
+                if !seen.insert(*partial_sig.signer_id.as_bytes()) {
+                    continue;
+                }
+
+                // b) extract the vote’s block hash
+                let blockhash = node.hash();
+
+                // ensure that quorum has same msg_hash
+                tally
+                    .entry((blockhash, *msg_hash))
+                    .or_default()
+                    .push(partial_sig);
             }
         }
 
@@ -235,7 +233,7 @@ impl HotStuffReplica {
     }
 
     fn get_justified_block(&self, block: &Block) -> Option<Arc<RwLock<Block>>> {
-        let hash = match &*block {
+        let hash = match block {
             Block::Normal { justify, .. } => &justify.block_hash,
             Block::Genesis { .. } => return None,
         };
@@ -313,16 +311,13 @@ impl HotStuffReplica {
 
             if self.generic_qc.view_number != curr_view - 1 {
                 // msgs should only contain justify if next-view interupt is triggered
-                match utils::get_highest_qc_from_votes(&msgs) {
-                    Some(high_qc) => {
-                        if high_qc.view_number > self.generic_qc.view_number {
-                            // update generic qc if replica falls behind
-                            self.generic_qc = Arc::new(high_qc.clone());
-                            self.messages.prune_before_view(self.generic_qc.view_number);
-                        }
-                    }
-                    None => {}
-                };
+                if let Some(high_qc) = utils::get_highest_qc_from_votes(&msgs)
+                    && high_qc.view_number > self.generic_qc.view_number
+                {
+                    // update generic qc if replica falls behind
+                    self.generic_qc = Arc::new(high_qc.clone());
+                    self.messages.prune_before_view(self.generic_qc.view_number);
+                }
             }
 
             let parent = {
@@ -397,7 +392,7 @@ impl HotStuffReplica {
         //     self.pacemaker.curr_view,
         //     "waiting for quorum (n - f)",
         // );
-        return None;
+        None
     }
 
     pub fn replica_handle_proposal(
@@ -534,7 +529,7 @@ impl HotStuffReplica {
         self.add_block_transactions_to_committed(&commited_block.read().unwrap());
         self.mempool.update_after_execution(account_nonces);
 
-        return outbound_msg;
+        outbound_msg
     }
 
     pub fn replica_handle_vote(&mut self) -> Option<HotStuffMessage> {
@@ -565,7 +560,7 @@ impl HotStuffReplica {
         // Advance view early without waiting for pacemaker timeout
         self.pacemaker.advance_view();
 
-        return Some(self.create_new_view());
+        Some(self.create_new_view())
     }
 
     pub fn replica_handle_message(&mut self, msg: HotStuffMessage) -> Option<HotStuffMessage> {
@@ -575,10 +570,10 @@ impl HotStuffReplica {
         //     self.pacemaker.curr_view
         // );
 
-        return match msg {
+        match msg {
             HotStuffMessage::NewView { .. } => {
                 // replica shouldn't handle new view
-                return None;
+                None
             }
             HotStuffMessage::Proposal { node, sender, .. } => {
                 self.replica_handle_proposal(node, sender)
@@ -586,9 +581,9 @@ impl HotStuffReplica {
             HotStuffMessage::Vote { .. } => {
                 // Messages that fall in this block are votes sent to the *next* leader
                 // We can try to optimistically advance the view, otherwise we ignore the messages
-                return self.replica_handle_vote();
+                self.replica_handle_vote()
             }
-        };
+        }
     }
 
     fn sync_view(&mut self, msg: &HotStuffMessage) -> bool {

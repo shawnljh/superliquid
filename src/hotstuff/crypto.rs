@@ -96,7 +96,7 @@ impl QuorumCertificate {
             !partial_sigs.is_empty(),
             "from_signatures requires at least one partial signature"
         );
-        let partial_sigs: Vec<PartialSig> = partial_sigs.into_iter().map(|x| x.clone()).collect();
+        let partial_sigs: Vec<PartialSig> = partial_sigs.into_iter().cloned().collect();
 
         QuorumCertificate {
             view_number,
