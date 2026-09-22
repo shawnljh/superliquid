@@ -1,3 +1,4 @@
+use crate::networking::message_protocol;
 use colored::Colorize;
 use ed25519_dalek::{SigningKey, VerifyingKey};
 use hex::FromHex;
@@ -10,7 +11,6 @@ use tokio::{net::tcp::OwnedWriteHalf, sync::Mutex};
 
 use crate::{
     client::ClientConnection,
-    message_protocol::{self},
     state::{
         asset::{Asset, AssetId},
         order::{LimitOrder, OrderDirection, OrderId, OrderType},

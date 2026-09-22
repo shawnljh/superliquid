@@ -1,19 +1,21 @@
-use std::io::{Error, ErrorKind, Result};
+use std::{
+    io::{Error, ErrorKind, Result},
+    sync::Arc,
+};
 
-use std::sync::Arc;
+use tokio::{
+    net::tcp::{OwnedReadHalf, OwnedWriteHalf},
+    sync::{Mutex, mpsc},
+};
 
-use tokio::net::tcp::{OwnedReadHalf, OwnedWriteHalf};
-use tokio::sync::Mutex;
-use tokio::sync::mpsc;
-
-use crate::message_protocol::{ControlMessage, send_ack};
-use crate::node::client::handler::handle_transaction;
-use crate::node::logger::Logger;
-use crate::node::state::PeerId;
-use crate::types::message::{Message, ReplicaInBound, mpsc_error};
 use crate::{
-    message_protocol::{self, AppMessage},
-    node::state::Node,
+    networking::message_protocol::{self, AppMessage, ControlMessage, send_ack},
+    node::{
+        client::handler::handle_transaction,
+        logger::Logger,
+        state::{Node, PeerId},
+    },
+    types::message::{Message, ReplicaInBound, mpsc_error},
 };
 
 pub(super) async fn handle_handshake(

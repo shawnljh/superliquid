@@ -1,11 +1,10 @@
-use std::io::Result;
-use std::sync::Arc;
+use std::{io::Result, sync::Arc};
 
 use futures::future::join_all;
 
 use crate::{
     hotstuff::message::HotStuffMessage,
-    message_protocol::{send_message, send_transaction},
+    networking::message_protocol::{send_message, send_transaction},
     node::state::{Node, PeerId},
     types::{message::Message, transaction::SignedTransaction},
 };

@@ -26,11 +26,10 @@ pub(crate) fn has_quorum_votes_for_view(
         return false;
     };
 
-    return msgs
-        .iter()
+    msgs.iter()
         .filter(|m| matches!(m, HotStuffMessage::Vote { view, .. } if *view == curr_view))
         .count()
-        >= quorum_threhold;
+        >= quorum_threhold
 }
 
 pub(crate) fn sig_to_string(sig: &Signature) -> String {

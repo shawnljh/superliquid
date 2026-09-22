@@ -1,15 +1,18 @@
-use std::sync::Arc;
+use std::{io::Result, sync::Arc};
 
-use std::io::Result;
-use tokio::sync::Mutex;
-use tokio::{net::TcpListener, sync::mpsc};
-
-use crate::node::peer::handler::handle_handshake;
-use crate::node::state::{PeerId, PeerSocket};
-use crate::node::{
-    peer::handler::handle_peer_connection, runner::deduplicate_peer_connection, state::Node,
+use tokio::{
+    net::TcpListener,
+    sync::{Mutex, mpsc},
 };
-use crate::types::message::ReplicaInBound;
+
+use crate::{
+    node::{
+        peer::handler::{handle_handshake, handle_peer_connection},
+        runner::deduplicate_peer_connection,
+        state::{Node, PeerId, PeerSocket},
+    },
+    types::message::ReplicaInBound,
+};
 
 async fn drop_peer_socket(node: Arc<Node>, peer_id: PeerId) {
     let logger = node.logger.clone();

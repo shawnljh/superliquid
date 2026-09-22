@@ -6,13 +6,13 @@ use tokio::{
     sync::{Mutex, mpsc, oneshot},
 };
 
-use crate::state::spot_clearinghouse::MarketId;
-use crate::state::spot_market::MarketInfo;
 use crate::{
-    message_protocol::{self, AppMessage, ControlMessage},
+    networking::message_protocol::{self, AppMessage, ControlMessage},
     node::{peer::broadcast::broadcast_transaction, state::Node},
     state::{
         asset::{Asset, AssetId},
+        spot_clearinghouse::MarketId,
+        spot_market::MarketInfo,
         state::AccountInfoWithBalances,
     },
     types::{

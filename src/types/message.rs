@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     hotstuff::message::HotStuffMessage,
-    message_protocol::{AppMessage, ControlMessage},
+    networking::message_protocol::{AppMessage, ControlMessage},
     node::{client::handler::QueryRequest, state::PeerId},
 };
 

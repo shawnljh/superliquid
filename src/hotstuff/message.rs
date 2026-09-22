@@ -30,7 +30,7 @@ impl<'a> UnsignedVote<'a> {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Phase {
     Proposal,
     Vote,

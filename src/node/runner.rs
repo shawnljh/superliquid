@@ -8,7 +8,7 @@ use tokio::{
 use crate::{
     config,
     hotstuff::replica::HotStuffReplica,
-    message_protocol::send_hello,
+    networking::message_protocol::send_hello,
     types::message::{ReplicaInBound, ReplicaOutbound},
 };
 

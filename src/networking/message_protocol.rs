@@ -2,15 +2,22 @@ use serde::{Deserialize, Serialize};
 use tokio::net::tcp::{OwnedReadHalf, OwnedWriteHalf};
 use tokio::sync::Mutex;
 
-use crate::hotstuff::message::HotStuffMessage;
-use crate::network;
-use crate::node::state::PeerId;
-use crate::state::asset::{Asset, AssetId};
-use crate::state::spot_clearinghouse::MarketId;
-use crate::state::spot_market::MarketInfo;
-use crate::state::state::AccountInfoWithBalances;
-use crate::types::message::Message;
-use crate::types::transaction::{PublicKeyHash, Sha256Hash, SignedTransaction};
+use super::network;
+
+use crate::{
+    hotstuff::message::HotStuffMessage,
+    node::state::PeerId,
+    state::{
+        asset::{Asset, AssetId},
+        spot_clearinghouse::MarketId,
+        spot_market::MarketInfo,
+        state::AccountInfoWithBalances,
+    },
+    types::{
+        message::Message,
+        transaction::{PublicKeyHash, Sha256Hash, SignedTransaction},
+    },
+};
 use std::io::{Error, ErrorKind, Result};
 use std::sync::Arc;
 
@@ -186,7 +193,7 @@ pub async fn send_query(
 
 pub async fn send_end(writer: Arc<Mutex<OwnedWriteHalf>>) -> Result<()> {
     let msg = ControlMessage::End;
-    send_message(writer, &&Message::Connection(msg)).await
+    send_message(writer, &Message::Connection(msg)).await
 }
 
 pub async fn send_ack(writer: Arc<Mutex<OwnedWriteHalf>>) -> Result<()> {
