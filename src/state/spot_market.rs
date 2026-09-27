@@ -183,7 +183,7 @@ impl SpotMarket {
                 }
             }
         }
-        return 0;
+        0
     }
 
     pub fn add_bid(&mut self, order: LimitOrder) {

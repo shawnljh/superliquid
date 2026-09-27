@@ -172,8 +172,8 @@ impl PriorityMempool {
 mod tests {
     use super::*;
     use crate::state::state::Nonce;
-    use crate::test_utils::test_helpers::get_alice_sk;
     use crate::types::transaction::{SignedTransaction, TransactionStatus, TransferTransaction};
+    use crate::utils::test_utils::test_helpers::get_alice_sk;
 
     fn mock_tx(pk: PublicKeyHash, nonce: Nonce) -> SignedTransaction {
         let mut alice_sk = get_alice_sk();

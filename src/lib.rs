@@ -5,11 +5,7 @@ pub mod hotstuff;
 pub mod networking;
 pub mod state;
 
-#[macro_use]
-mod macros;
+pub mod utils;
 
 pub mod node;
 pub mod types;
-
-#[cfg(test)]
-pub mod test_utils;

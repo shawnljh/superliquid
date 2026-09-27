@@ -10,7 +10,7 @@ use std::time::Duration;
 pub(crate) fn retrieve_verifying_key(node_id: usize) -> VerifyingKey {
     dotenv().ok();
     let env_key = format!("PUBLIC_KEY_{}", node_id);
-    let pk_hex = env::var(&env_key).expect(&format!("{} not set", &env_key));
+    let pk_hex = env::var(&env_key).expect(&format!("{} not set", env_key));
 
     let pk_bytes = <[u8; 32]>::from_hex(&pk_hex).expect("Invalid hex");
     VerifyingKey::from_bytes(&pk_bytes).expect("Invalid public key bytes")

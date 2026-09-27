@@ -186,7 +186,7 @@ fn display_spot_actions() {
 }
 
 fn display_market(market_info: &MarketInfo, base_asset_info: &Asset) {
-    let market_name = format!("{}", market_info.market_name).blue();
+    let market_name = market_info.market_name.to_string().blue();
     let tick_size = market_info.tick;
     let tick_decimals = market_info.tick_decimals;
 
@@ -417,7 +417,7 @@ async fn handle_transfer(
     let tx = txn.sign(&mut client.sk);
 
     message_protocol::send_transaction(client_connection.writer.clone(), tx).await?;
-    return Ok(());
+    Ok(())
 }
 
 async fn handle_query(
@@ -441,7 +441,7 @@ async fn handle_query(
     println!("Account: {}", pk);
     display_spot_balances(asset_infos, account_info_with_balances.spot_balances);
 
-    return Ok(());
+    Ok(())
 }
 
 async fn handle_open_orders(
@@ -657,7 +657,7 @@ async fn fetch_asset_infos(client_connection: &ClientConnection) -> std::io::Res
 async fn handle_market(
     client: &mut ClientAccount,
     connection: &ClientConnection,
-    asset_infos: &Vec<Asset>,
+    asset_infos: &[Asset],
     market_id: MarketId,
 ) -> std::io::Result<()> {
     loop {
@@ -923,7 +923,7 @@ async fn handle_market(
 async fn handle_markets(
     client: &mut Option<ClientAccount>,
     client_connection: &ClientConnection,
-    asset_infos: &Vec<Asset>,
+    asset_infos: &[Asset],
 ) -> std::io::Result<()> {
     let Some(client) = client else {
         println!("Please create or load an account.");

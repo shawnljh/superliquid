@@ -205,7 +205,7 @@ pub async fn send_ack(writer: Arc<Mutex<OwnedWriteHalf>>) -> Result<()> {
 mod tests {
 
     use super::*;
-    use crate::test_utils::test_helpers::{get_alice_pk_str, make_alice_transaction};
+    use crate::utils::test_utils::test_helpers::{get_alice_pk_str, make_alice_transaction};
     use tokio::net::{TcpListener, TcpStream};
 
     #[tokio::test]

@@ -167,10 +167,10 @@ impl LedgerState {
         let account_info = self.accounts.get(public_key)?;
         let account_balances = self.spot_clearinghouse.get_account_balance(public_key)?;
 
-        return Some(AccountInfoWithBalancesRef {
-            account_info: account_info,
+        Some(AccountInfoWithBalancesRef {
+            account_info,
             spot_balances: account_balances,
-        });
+        })
     }
 
     pub(crate) fn get_account_info_or_default(&self, public_key: &PublicKeyHash) -> AccountInfo {
@@ -529,7 +529,7 @@ impl LedgerState {
         account.expected_nonce += 1;
         transaction.status = TransactionStatus::Executed;
 
-        return Some((user_account, account.expected_nonce));
+        Some((user_account, account.expected_nonce))
     }
 
     pub(crate) fn handle_cancel_order_transaction(
@@ -601,7 +601,7 @@ impl LedgerState {
         account.expected_nonce += 1;
         transaction.status = TransactionStatus::Executed;
 
-        return Some((user_account, account.expected_nonce));
+        Some((user_account, account.expected_nonce))
     }
 
     pub(crate) fn handle_transfer_transaction(
@@ -654,11 +654,11 @@ impl LedgerState {
                 }
             }
         }
-        return account_nonces;
+        account_nonces
     }
 
     pub(crate) fn apply_block(&mut self, block: &mut Block) -> Vec<Option<(PublicKeyHash, Nonce)>> {
-        return self.apply(block.transactions_mut());
+        self.apply(block.transactions_mut())
     }
 
     pub fn handle_query(&self, query: ClientQuery) -> ClientResponse {
@@ -697,11 +697,11 @@ mod tests {
                 spot_clearinghouse::{MarketId, MarketPrecision},
                 state::{AccountInfo, LedgerState, Nonce},
             },
-            test_utils::test_helpers::{get_alice_sk, get_bob_sk, get_carol_sk},
             types::transaction::{
                 CancelOrderTransaction, OrderTransaction, PublicKeyHash, SignedTransaction,
                 TransactionStatus, TransferTransaction, UnsignedTransaction,
             },
+            utils::test_utils::test_helpers::{get_alice_sk, get_bob_sk, get_carol_sk},
         };
 
         fn create_faucet_txn(

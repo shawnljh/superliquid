@@ -107,7 +107,7 @@ impl SignedTransaction {
             UnsignedTransaction::Transfer(transaction) => {
                 let public_key = PublicKeyString::from_bytes(transaction.from).as_public_key();
                 let tx_hash = self.hash;
-                let signature = utils::string_to_sig(&self.signature.as_str())
+                let signature = utils::string_to_sig(self.signature.as_str())
                     .expect("Conversion from string to signature failed");
                 public_key.verify_strict(&tx_hash, &signature).is_ok()
             }
@@ -115,7 +115,7 @@ impl SignedTransaction {
             UnsignedTransaction::Order(transaction) => {
                 let public_key = PublicKeyString::from_bytes(transaction.from).as_public_key();
                 let tx_hash = self.hash();
-                let signature = utils::string_to_sig(&self.signature.as_str())
+                let signature = utils::string_to_sig(self.signature.as_str())
                     .expect("Conversion from string to signature failed");
                 public_key.verify_strict(&tx_hash, &signature).is_ok()
             }
@@ -123,7 +123,7 @@ impl SignedTransaction {
             UnsignedTransaction::CancelOrder(transaction) => {
                 let public_key = PublicKeyString::from_bytes(transaction.from).as_public_key();
                 let tx_hash = self.hash();
-                let signature = utils::string_to_sig(&self.signature.as_str())
+                let signature = utils::string_to_sig(self.signature.as_str())
                     .expect("Conversion from string to signature failed");
                 public_key.verify_strict(&tx_hash, &signature).is_ok()
             }
