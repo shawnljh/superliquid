@@ -2,7 +2,7 @@
 
 A Rust implementation of a **Byzantine Fault Tolerant (BFT)** consensus protocol inspired by [HotStuff](https://arxiv.org/abs/1803.05069), extended with a native spot decentralised exchange (DEX) integrated directly into the execution layer. This project aims to demonstrate rotating leader consensus, peer-to-peer networking, chained hotstuff pipelining and native DEX orderbook matching. 
 
-> **Status**: Basic Layer one blockchain and Spot DEX functionality are completed. Perps DEX in development. Any and all feedback is welcome! 
+> Built mostly by hand, with AI used deliberately as a learning tool and to review designs, not to write core logic. See [AI Use](#ai-use)  
 
 ---
 
@@ -16,8 +16,9 @@ A Rust implementation of a **Byzantine Fault Tolerant (BFT)** consensus protocol
 6. [Getting Started](#getting-started)  
 7. [Usage](#usage)  
 8. [Roadmap](#roadmap)  
-9. [License](#license)  
-10. [References](#references)
+9. [AI use](#ai-use)
+10. [License](#license)  
+11. [References](#references)
 
 ---
 
@@ -270,6 +271,13 @@ You can monitor the console output to see:
 
 **Mempool Improvements**
 - [ ] Enforce per-account pending transaction limits to defend against spam attacks.
+
+---
+
+## AI Use
+
+I used AI as a Socratic partner to challenge designs and explain concepts, and like a more senior engineer to unblock me when I got stuck and highlight areas for improvement.
+Additionally, it generated unit tests, refined documentation and some boilerplate code all of which I reviewed and understand. To the best of my recollection, the core logic (consensus, networking, state and concurrency) is my own implementation.
 
 ---
 
