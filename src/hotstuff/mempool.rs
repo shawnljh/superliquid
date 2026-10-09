@@ -142,7 +142,7 @@ impl PriorityMempool {
                 }
             }
         }
-        return result;
+        result
     }
 
     pub fn _len(&self) -> usize {

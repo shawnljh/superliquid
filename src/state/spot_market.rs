@@ -119,7 +119,7 @@ impl SpotMarket {
         )
     }
 
-    fn mark_order_as_cancelled(orders: &mut Vec<LimitOrder>, order: &LimitOrder) -> bool {
+    fn mark_order_as_cancelled(orders: &mut [LimitOrder], order: &LimitOrder) -> bool {
         let order_id = order.common.id;
         let mut left = 0;
         let mut right = orders.len();
@@ -139,7 +139,7 @@ impl SpotMarket {
                 left = mid + 1;
             }
         }
-        return false;
+        false
     }
 
     fn cancel_order_with_cmp<F>(levels: &mut Vec<Level>, order: &LimitOrder, mut compare: F) -> u64
@@ -308,7 +308,7 @@ impl SpotMarket {
         order.filled_base_lots = order.base_lots - remaining_base_amount;
 
         // Return execution results for clearinghouse to settle
-        return LimitFillResult {
+        LimitFillResult {
             filled_orders,
             residual_order,
             user_order: UserExecutionResult {
@@ -320,7 +320,7 @@ impl SpotMarket {
                 filled_size: order.filled_base_lots,
             },
             last_executed_price,
-        };
+        }
     }
 
     pub fn execute_market_buy_order(

@@ -663,20 +663,20 @@ impl LedgerState {
 
     pub fn handle_query(&self, query: ClientQuery) -> ClientResponse {
         match query {
-            crate::node::client::handler::ClientQuery::AccountQuery(public_key) => {
+            crate::node::client::handler::ClientQuery::Account(public_key) => {
                 let account_info_with_balances =
                     self.get_account_info_with_balances_or_default(&public_key);
                 ClientResponse::AccountQueryReponse(account_info_with_balances)
             }
-            crate::node::client::handler::ClientQuery::AssetQuery => {
+            crate::node::client::handler::ClientQuery::Asset => {
                 let asset_info = self.get_asset_info();
                 ClientResponse::AssetQueryResponse(asset_info)
             }
-            crate::node::client::handler::ClientQuery::MarketInfoQuery(market_id) => {
+            crate::node::client::handler::ClientQuery::MarketInfo(market_id) => {
                 let market_info = self.get_market_info(market_id);
                 ClientResponse::MarketInfoQueryResponse(market_info)
             }
-            crate::node::client::handler::ClientQuery::MarketsQuery => {
+            crate::node::client::handler::ClientQuery::Markets => {
                 let market_infos = self.get_markets();
                 ClientResponse::MarketsQueryResponse(market_infos)
             }

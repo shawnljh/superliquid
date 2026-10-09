@@ -100,10 +100,7 @@ pub(crate) async fn connect_to_peer(addr: String, peer_id: usize, node: Arc<Node
 
                 {
                     let mut socket_peer_map = node.socket_peer_map.write().await;
-
-                    if !socket_peer_map.contains_key(&socket_addr) {
-                        socket_peer_map.insert(socket_addr, peer_id);
-                    }
+                    socket_peer_map.entry(socket_addr).or_insert(peer_id);
                 }
                 let reader = Arc::new(Mutex::new(reader));
                 let writer = Arc::new(Mutex::new(writer));

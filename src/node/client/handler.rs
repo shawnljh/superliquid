@@ -27,10 +27,10 @@ use crate::{
 use super::listener::ClientSocket;
 
 pub enum ClientQuery {
-    AccountQuery(PublicKeyHash),
-    AssetQuery,
-    MarketInfoQuery(MarketId),
-    MarketsQuery,
+    Account(PublicKeyHash),
+    Asset,
+    MarketInfo(MarketId),
+    Markets,
 }
 
 #[derive(Debug)]
@@ -111,7 +111,7 @@ pub(super) async fn handle_account_query(
     pk_bytes: PublicKeyHash,
     to_replica_tx: mpsc::Sender<ReplicaInBound>,
 ) -> Result<()> {
-    let query = ClientQuery::AccountQuery(pk_bytes);
+    let query = ClientQuery::Account(pk_bytes);
     let response = send_query_to_replica(query, to_replica_tx).await?;
 
     match response {
@@ -137,7 +137,7 @@ pub(super) async fn handle_asset_query(
     writer: Arc<Mutex<OwnedWriteHalf>>,
     to_replica_tx: mpsc::Sender<ReplicaInBound>,
 ) -> Result<()> {
-    let query = ClientQuery::AssetQuery;
+    let query = ClientQuery::Asset;
     let response = send_query_to_replica(query, to_replica_tx).await?;
 
     match response {
@@ -164,7 +164,7 @@ pub(super) async fn handle_market_query(
     writer: Arc<Mutex<OwnedWriteHalf>>,
     to_replica_tx: mpsc::Sender<ReplicaInBound>,
 ) -> Result<()> {
-    let query = ClientQuery::MarketInfoQuery(market_id);
+    let query = ClientQuery::MarketInfo(market_id);
     let response = send_query_to_replica(query, to_replica_tx).await?;
 
     match response {
@@ -190,7 +190,7 @@ pub(super) async fn handle_markets_query(
     writer: Arc<Mutex<OwnedWriteHalf>>,
     to_replica_tx: mpsc::Sender<ReplicaInBound>,
 ) -> Result<()> {
-    let query = ClientQuery::MarketsQuery;
+    let query = ClientQuery::Markets;
     let response = send_query_to_replica(query, to_replica_tx).await?;
 
     match response {
@@ -221,7 +221,7 @@ pub(super) async fn handle_drip(
     let mut faucet_key = node.faucet_key.clone();
     let faucet_pk_bytes = faucet_key.verifying_key().to_bytes();
 
-    let query = ClientQuery::AccountQuery(faucet_pk_bytes);
+    let query = ClientQuery::Account(faucet_pk_bytes);
     let response = send_query_to_replica(query, to_replica_tx.clone()).await?;
 
     let account_info = match response {

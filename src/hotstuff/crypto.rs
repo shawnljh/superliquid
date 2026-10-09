@@ -133,7 +133,7 @@ impl QuorumCertificate {
             } else {
                 println!(
                     "Not valid {:?} {:?}. pk: {:?}",
-                    &self.message_hash, &sig.signature, pk,
+                    self.message_hash, sig.signature, pk,
                 )
             }
         }
