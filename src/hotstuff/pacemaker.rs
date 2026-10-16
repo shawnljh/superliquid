@@ -7,6 +7,7 @@ use crate::{config, pacemaker_log, types::consensus::ViewNumber};
 
 use super::crypto::QuorumCertificate;
 
+#[derive(Debug)]
 pub struct Pacemaker {
     pub curr_view: ViewNumber,
     pub last_commited_view: ViewNumber,

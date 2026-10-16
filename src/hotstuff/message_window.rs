@@ -56,6 +56,7 @@ pub(crate) struct ViewSlot {
     pub prepare: HashMap<ReplicaId, HotStuffMessage>,
 }
 
+#[derive(Debug)]
 pub struct MessageWindow {
     messages: Vec<ViewSlot>,
     lowest_view: ViewNumber,

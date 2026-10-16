@@ -1,5 +1,5 @@
 use std::{
-    collections::{HashMap, HashSet},
+    collections::{HashMap, HashSet, VecDeque},
     sync::{Arc, RwLock},
 };
 
@@ -35,6 +35,7 @@ use super::{
 
 const BLOCK_TRANSACTION_LENGTH: usize = 16;
 
+#[derive(Debug)]
 struct ViewProgress {
     pub leader_has_proposed: bool,
     pub replica_has_voted: bool,
@@ -62,6 +63,8 @@ pub struct HotStuffReplica {
     committed_transactions: HashMap<Sha256Hash, SignedTransaction>,
 
     pub messages: MessageWindow,
+    pub self_messages: VecDeque<HotStuffMessage>,
+
     pub pacemaker: Pacemaker,
 
     pub rep_node_channel: ReplicaSender,
@@ -105,6 +108,8 @@ impl HotStuffReplica {
 
             // TODO: pass in config
             messages: MessageWindow::new(0, 100),
+            // We only expect to handle a handle full of self-messages at once
+            self_messages: VecDeque::with_capacity(8),
 
             pacemaker: Pacemaker::new(),
             rep_node_channel: ReplicaSender {
@@ -605,7 +610,7 @@ impl HotStuffReplica {
             if is_leader {
                 // Send new-view msg to self
                 let new_view_msg: HotStuffMessage = self.create_new_view();
-                self.rep_node_channel.send_to_self(new_view_msg).await?
+                self.self_messages.push_back(new_view_msg);
             }
         }
 
@@ -685,8 +690,7 @@ impl HotStuffReplica {
             //     self.pacemaker.curr_view,
             //     "Sending to self as node is next leader"
             // );
-            let _ = self.rep_node_channel.send_to_self(outbound_msg).await;
-
+            self.self_messages.push_back(outbound_msg);
             return Ok(());
         }
 
@@ -729,7 +733,8 @@ impl HotStuffReplica {
         let outbound_msg = self.create_new_view();
 
         if self.node_id == leader {
-            self.rep_node_channel.send_to_self(outbound_msg).await
+            self.self_messages.push_back(outbound_msg);
+            Ok(())
             // replica_debug!(self.node_id, self.pacemaker.curr_view -1 , "Timeout: Sending self");
         } else {
             // replica_debug!(self.node_id, self.pacemaker.curr_view -1 , "Timeout: Sending to node: {:?} with msg view: {:?}", leader, outbound_msg.view_number);
@@ -752,6 +757,10 @@ impl HotStuffReplica {
     ) -> Result<(), std::io::Error> {
         replica_log!(self.node_id, "Running replica...");
         loop {
+            while let Some(msg) = self.self_messages.pop_front() {
+                self.handle_message(msg).await?;
+            }
+
             // Refresh pacemaker timer dynamically each loop
             let time_remaining = self.pacemaker.time_remaining();
             let pacemaker_timer = sleep(time_remaining);

@@ -10,13 +10,6 @@ pub struct ReplicaSender {
 }
 
 impl ReplicaSender {
-    pub(super) async fn send_to_self(&self, msg: HotStuffMessage) -> Result<(), std::io::Error> {
-        self.replica_tx
-            .send(ReplicaInBound::HotStuff(msg))
-            .await
-            .map_err(|e| mpsc_error("Send to replica failed", e))
-    }
-
     pub(super) async fn broadcast(&self, msg: HotStuffMessage) -> Result<(), std::io::Error> {
         self.node_tx
             .send(ReplicaOutbound::Broadcast(msg))
