@@ -4,6 +4,7 @@ use std::sync::atomic::{
     Ordering::{Acquire, Relaxed, Release},
 };
 
+use crossbeam_utils::CachePadded;
 use std::mem::MaybeUninit;
 use std::sync::Arc;
 
@@ -32,8 +33,8 @@ impl<T> SPSCLFQueueReceiver<T> {
 }
 
 struct SPSCLFQueue<T> {
-    head: AtomicUsize,
-    tail: AtomicUsize,
+    head: CachePadded<AtomicUsize>,
+    tail: CachePadded<AtomicUsize>,
     cap: usize,
     mask: usize,
     arr: Vec<UnsafeCell<MaybeUninit<T>>>,
@@ -69,8 +70,8 @@ impl<T> SPSCLFQueue<T> {
         arr.resize_with(cap, || UnsafeCell::new(MaybeUninit::uninit()));
 
         Self {
-            head: AtomicUsize::new(0),
-            tail: AtomicUsize::new(0),
+            head: CachePadded::new(AtomicUsize::new(0)),
+            tail: CachePadded::new(AtomicUsize::new(0)),
             arr,
             cap,
             mask: cap - 1,
