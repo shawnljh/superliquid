@@ -167,4 +167,15 @@ impl HotStuffMessage {
         | HotStuffMessage::NewView { sender_view, .. }) = self;
         *sender_view
     }
+
+    pub(crate) fn get_message_qc(&self) -> Option<&QuorumCertificate> {
+        match self {
+            HotStuffMessage::Proposal { node, .. } => {
+                let (Block::Genesis { justify, .. } | Block::Normal { justify, .. }) = node;
+                Some(justify)
+            }
+            HotStuffMessage::NewView { justify, .. } => Some(justify),
+            _ => None,
+        }
+    }
 }

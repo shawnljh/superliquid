@@ -591,9 +591,20 @@ impl HotStuffReplica {
         }
     }
 
+    // Sync view if replica's view is lower than quorum's view
     fn sync_view(&mut self, msg: &HotStuffMessage) -> bool {
         let incoming_view = msg.get_view_number();
-        self.pacemaker.fast_forward_view(incoming_view)
+        if incoming_view <= self.pacemaker.curr_view {
+            return false;
+        }
+        if let Some(qc) = msg.get_message_qc()
+            && qc.view_number + 1 > self.pacemaker.curr_view
+            && qc.verify(&self.validator_set, self.quorum_threshold())
+        {
+            self.pacemaker.fast_forward_view(qc.view_number + 1)
+        } else {
+            false
+        }
     }
 
     async fn handle_message(&mut self, msg: HotStuffMessage) -> Result<(), std::io::Error> {
