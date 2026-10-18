@@ -42,6 +42,7 @@ use std::collections::HashMap;
 
 use crate::{
     hotstuff::message::Phase,
+    node::state::PeerId,
     types::consensus::{ReplicaId, ViewNumber},
 };
 
@@ -93,7 +94,7 @@ impl MessageWindow {
         self.lowest_view = view;
     }
 
-    pub fn push(&mut self, msg: HotStuffMessage) -> bool {
+    pub fn push(&mut self, msg: HotStuffMessage, sender: PeerId) -> bool {
         if msg.get_view_number() < self.lowest_view {
             return false;
         }
@@ -107,7 +108,6 @@ impl MessageWindow {
             self.messages.resize_with(index + 1, ViewSlot::default);
         }
         let view_slot = &mut self.messages[index];
-        let sender = msg.get_sender();
         let map = match msg {
             HotStuffMessage::Proposal { .. } => &mut view_slot.propose,
             HotStuffMessage::Vote { .. } => &mut view_slot.vote,
@@ -147,12 +147,9 @@ impl MessageWindow {
 
 #[cfg(test)]
 mod tests {
-    use crate::{
-        hotstuff::{
-            block::Block,
-            crypto::{PartialSig, QuorumCertificate},
-        },
-        node::state::PeerId,
+    use crate::hotstuff::{
+        block::Block,
+        crypto::{PartialSig, QuorumCertificate},
     };
 
     use super::*;
@@ -169,25 +166,23 @@ mod tests {
         PartialSig::mock(0)
     }
 
-    fn dummy_new_view_message(view: ViewNumber, sender: PeerId) -> HotStuffMessage {
-        HotStuffMessage::create_new_view(dummy_qc(), view, sender, 0)
+    fn dummy_new_view_message(view: ViewNumber) -> HotStuffMessage {
+        HotStuffMessage::create_new_view(dummy_qc(), view, 0)
     }
 
-    fn dummy_proposal_message(view: ViewNumber, sender: PeerId) -> HotStuffMessage {
+    fn dummy_proposal_message(view: ViewNumber) -> HotStuffMessage {
         HotStuffMessage::Proposal {
             node: dummy_block(),
             view,
-            sender,
             sender_view: view,
         }
     }
 
-    fn dummy_vote_message(view: ViewNumber, sender: PeerId) -> HotStuffMessage {
+    fn dummy_vote_message(view: ViewNumber) -> HotStuffMessage {
         HotStuffMessage::Vote {
-            node: dummy_block(),
+            block_hash: dummy_block().hash(),
             partial_sig: dummy_partial_sig(),
             view,
-            sender,
             sender_view: view,
         }
     }
@@ -207,8 +202,8 @@ mod tests {
     #[test]
     fn push_proposal_routes_to_propose_map() {
         let mut window = MessageWindow::new(5, 10);
-        let msg = dummy_proposal_message(5, 1);
-        assert!(window.push(msg.clone()));
+        let msg = dummy_proposal_message(5);
+        assert!(window.push(msg.clone(), 1));
 
         let slot = window.get_viewslot_for_view(5).unwrap();
         assert_eq!(slot.propose.get(&1), Some(&msg));
@@ -219,8 +214,8 @@ mod tests {
     #[test]
     fn push_vote_routes_to_vote_map() {
         let mut window = MessageWindow::new(5, 10);
-        let msg = dummy_vote_message(5, 1);
-        assert!(window.push(msg.clone()));
+        let msg = dummy_vote_message(5);
+        assert!(window.push(msg.clone(), 1));
 
         let slot = window.get_viewslot_for_view(5).unwrap();
         assert_eq!(slot.vote.get(&1), Some(&msg));
@@ -231,8 +226,8 @@ mod tests {
     #[test]
     fn push_new_view_routes_to_new_view_map() {
         let mut window = MessageWindow::new(5, 10);
-        let msg = dummy_new_view_message(5, 1);
-        assert!(window.push(msg.clone()));
+        let msg = dummy_new_view_message(5);
+        assert!(window.push(msg.clone(), 1));
 
         let slot = window.get_viewslot_for_view(5).unwrap();
         assert_eq!(slot.new_view.get(&1), Some(&msg));
@@ -245,36 +240,36 @@ mod tests {
     #[test]
     fn push_rejects_view_below_lowest() {
         let mut window = MessageWindow::new(5, 10);
-        assert!(!window.push(dummy_new_view_message(4, 1)));
+        assert!(!window.push(dummy_new_view_message(4), 1));
         assert!(window.messages.is_empty());
     }
 
     #[test]
     fn push_accepts_view_equal_to_lowest() {
         let mut window = MessageWindow::new(5, 10);
-        assert!(window.push(dummy_new_view_message(5, 1)));
+        assert!(window.push(dummy_new_view_message(5), 1));
         assert_eq!(window.messages.len(), 1);
     }
 
     #[test]
     fn push_rejects_view_at_upper_boundary() {
         let mut window = MessageWindow::new(5, 10);
-        assert!(!window.push(dummy_new_view_message(15, 1)));
+        assert!(!window.push(dummy_new_view_message(15), 1));
         assert!(window.messages.is_empty());
     }
 
     #[test]
     fn push_accepts_view_just_below_upper_boundary() {
         let mut window = MessageWindow::new(5, 10);
-        assert!(window.push(dummy_new_view_message(14, 1)));
+        assert!(window.push(dummy_new_view_message(14), 1));
         assert_eq!(window.messages.len(), 10);
     }
 
     #[test]
     fn push_grows_vec_to_cover_future_view() {
         let mut window = MessageWindow::new(3, 10);
-        let msg = dummy_new_view_message(6, 1);
-        assert!(window.push(msg.clone()));
+        let msg = dummy_new_view_message(6);
+        assert!(window.push(msg.clone(), 1));
         assert_eq!(window.messages.len(), 4); // views 3,4,5,6
         assert_eq!(
             window.get_viewslot_for_view(6).unwrap().new_view.get(&1),
@@ -286,9 +281,9 @@ mod tests {
     #[test]
     fn push_duplicate_sender_same_view_overwrites() {
         let mut window = MessageWindow::new(5, 10);
-        window.push(dummy_new_view_message(5, 1));
-        let msg2 = dummy_new_view_message(5, 1);
-        window.push(msg2.clone());
+        window.push(dummy_new_view_message(5), 1);
+        let msg2 = dummy_new_view_message(5);
+        window.push(msg2.clone(), 1);
 
         let slot = window.get_viewslot_for_view(5).unwrap();
         assert_eq!(slot.new_view.len(), 1);
@@ -298,8 +293,8 @@ mod tests {
     #[test]
     fn push_different_senders_same_view_both_kept() {
         let mut window = MessageWindow::new(5, 10);
-        window.push(dummy_new_view_message(5, 1));
-        window.push(dummy_new_view_message(5, 2));
+        window.push(dummy_new_view_message(5), 1);
+        window.push(dummy_new_view_message(5), 2);
 
         let slot = window.get_viewslot_for_view(5).unwrap();
         assert_eq!(slot.new_view.len(), 2);
@@ -316,14 +311,14 @@ mod tests {
     #[test]
     fn get_viewslot_for_view_none_when_out_of_range() {
         let mut window = MessageWindow::new(5, 10);
-        window.push(dummy_new_view_message(5, 1));
+        window.push(dummy_new_view_message(5), 1);
         assert!(window.get_viewslot_for_view(6).is_none());
     }
 
     #[test]
     fn get_viewslot_for_view_some_within_range() {
         let mut window = MessageWindow::new(5, 10);
-        window.push(dummy_new_view_message(7, 1));
+        window.push(dummy_new_view_message(7), 1);
         assert!(window.get_viewslot_for_view(5).is_some());
         assert!(window.get_viewslot_for_view(6).is_some());
         assert!(window.get_viewslot_for_view(7).is_some());
@@ -344,9 +339,9 @@ mod tests {
     #[test]
     fn get_phase_messages_for_view_returns_matching_phase_only() {
         let mut window = MessageWindow::new(5, 10);
-        window.push(dummy_new_view_message(5, 1));
-        window.push(dummy_vote_message(5, 2));
-        window.push(dummy_proposal_message(5, 3));
+        window.push(dummy_new_view_message(5), 1);
+        window.push(dummy_vote_message(5), 2);
+        window.push(dummy_proposal_message(5), 3);
 
         let new_view_msgs = window
             .get_phase_messages_for_view(5, Phase::NewView)
@@ -365,7 +360,7 @@ mod tests {
     #[test]
     fn get_phase_messages_for_view_empty_map_returns_empty_vec() {
         let mut window = MessageWindow::new(5, 10);
-        window.push(dummy_new_view_message(5, 1));
+        window.push(dummy_new_view_message(5), 1);
 
         // vote map is empty for this view, but view itself is in range -> Some(vec![])
         let vote_msgs = window.get_phase_messages_for_view(5, Phase::Vote).unwrap();
@@ -375,9 +370,9 @@ mod tests {
     #[test]
     fn get_phase_messages_for_view_multiple_senders() {
         let mut window = MessageWindow::new(5, 10);
-        window.push(dummy_vote_message(5, 1));
-        window.push(dummy_vote_message(5, 2));
-        window.push(dummy_vote_message(5, 3));
+        window.push(dummy_vote_message(5), 1);
+        window.push(dummy_vote_message(5), 2);
+        window.push(dummy_vote_message(5), 3);
 
         let vote_msgs = window.get_phase_messages_for_view(5, Phase::Vote).unwrap();
         assert_eq!(vote_msgs.len(), 3);
@@ -388,7 +383,7 @@ mod tests {
     #[test]
     fn prune_before_view_noop_when_below_lowest() {
         let mut window = MessageWindow::new(5, 10);
-        window.push(dummy_new_view_message(5, 1));
+        window.push(dummy_new_view_message(5), 1);
         window.prune_before_view(4);
         assert_eq!(window.lowest_view, 5);
         assert_eq!(window.messages.len(), 1);
@@ -398,7 +393,7 @@ mod tests {
     fn prune_before_view_removes_prefix() {
         let mut window = MessageWindow::new(2, 10);
         for v in 2..6 {
-            window.push(dummy_new_view_message(v, 1));
+            window.push(dummy_new_view_message(v), 1);
         }
         window.prune_before_view(4);
         assert_eq!(window.lowest_view, 4);
@@ -418,8 +413,8 @@ mod tests {
     #[test]
     fn prune_before_view_clears_all_when_beyond_window() {
         let mut window = MessageWindow::new(1, 10);
-        window.push(dummy_new_view_message(1, 1));
-        window.push(dummy_new_view_message(2, 2));
+        window.push(dummy_new_view_message(1), 1);
+        window.push(dummy_new_view_message(2), 2);
         window.prune_before_view(10);
         assert_eq!(window.messages.len(), 0);
         assert_eq!(window.lowest_view, 10);
@@ -428,8 +423,8 @@ mod tests {
     #[test]
     fn prune_before_view_exact_upper_boundary_clears_all() {
         let mut window = MessageWindow::new(2, 10);
-        window.push(dummy_new_view_message(2, 1));
-        window.push(dummy_new_view_message(3, 1));
+        window.push(dummy_new_view_message(2), 1);
+        window.push(dummy_new_view_message(3), 1);
         window.prune_before_view(4);
         assert_eq!(window.messages.len(), 0);
         assert_eq!(window.lowest_view, 4);
@@ -438,10 +433,10 @@ mod tests {
     #[test]
     fn push_after_prune_uses_new_lowest_view() {
         let mut window = MessageWindow::new(2, 10);
-        window.push(dummy_new_view_message(2, 1));
+        window.push(dummy_new_view_message(2), 1);
         window.prune_before_view(5);
-        assert!(window.push(dummy_new_view_message(5, 1)));
+        assert!(window.push(dummy_new_view_message(5), 1));
         assert!(window.get_viewslot_for_view(5).is_some());
-        assert!(!window.push(dummy_new_view_message(4, 1)));
+        assert!(!window.push(dummy_new_view_message(4), 1));
     }
 }

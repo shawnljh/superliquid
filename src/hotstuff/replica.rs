@@ -12,7 +12,10 @@ use tokio::{
 
 use crate::{
     config,
-    hotstuff::{message::Phase, utils},
+    hotstuff::{
+        message::{HotStuffEnvelope, Phase},
+        utils,
+    },
     node::client::handler::QueryRequest,
     replica_debug, replica_log,
     state::state::LedgerState,
@@ -112,10 +115,7 @@ impl HotStuffReplica {
             self_messages: VecDeque::with_capacity(8),
 
             pacemaker: Pacemaker::new(),
-            rep_node_channel: ReplicaSender {
-                replica_tx,
-                node_tx,
-            },
+            rep_node_channel: ReplicaSender::new(node_id, replica_tx, node_tx),
 
             ledger_state: LedgerState::new(),
 
@@ -128,9 +128,8 @@ impl HotStuffReplica {
 
     pub fn vote_message(&mut self, node: &Block) -> HotStuffMessage {
         HotStuffMessage::create_vote(
-            node.clone(), // need to clone as we are serialising our message
+            node.hash(),
             self.pacemaker.curr_view,
-            self.node_id,
             self.pacemaker.curr_view,
             &mut self.signing_key,
         )
@@ -165,7 +164,9 @@ impl HotStuffReplica {
 
         for message in vote_msgs {
             if let HotStuffMessage::Vote {
-                partial_sig, node, ..
+                partial_sig,
+                block_hash,
+                ..
             } = message
             {
                 // a) signature must come from a known, unseen validator
@@ -187,12 +188,9 @@ impl HotStuffReplica {
                     continue;
                 }
 
-                // b) extract the vote’s block hash
-                let blockhash = node.hash();
-
                 // ensure that quorum has same msg_hash
                 tally
-                    .entry((blockhash, *msg_hash))
+                    .entry((*block_hash, *msg_hash))
                     .or_default()
                     .push(partial_sig);
             }
@@ -232,7 +230,6 @@ impl HotStuffReplica {
         HotStuffMessage::create_proposal(
             new_block,
             self.pacemaker.curr_view,
-            self.node_id,
             self.pacemaker.curr_view,
         )
     }
@@ -568,7 +565,11 @@ impl HotStuffReplica {
         Some(self.create_new_view())
     }
 
-    pub fn replica_handle_message(&mut self, msg: HotStuffMessage) -> Option<HotStuffMessage> {
+    pub fn replica_handle_message(
+        &mut self,
+        msg: HotStuffMessage,
+        sender: usize,
+    ) -> Option<HotStuffMessage> {
         // replica_log!(
         //     self.node_id,
         //     "Replica handle message with at view: {:?}",
@@ -580,9 +581,7 @@ impl HotStuffReplica {
                 // replica shouldn't handle new view
                 None
             }
-            HotStuffMessage::Proposal { node, sender, .. } => {
-                self.replica_handle_proposal(node, sender)
-            }
+            HotStuffMessage::Proposal { node, .. } => self.replica_handle_proposal(node, sender),
             HotStuffMessage::Vote { .. } => {
                 // Messages that fall in this block are votes sent to the *next* leader
                 // We can try to optimistically advance the view, otherwise we ignore the messages
@@ -607,7 +606,11 @@ impl HotStuffReplica {
         }
     }
 
-    async fn handle_message(&mut self, msg: HotStuffMessage) -> Result<(), std::io::Error> {
+    async fn handle_message(
+        &mut self,
+        msg_envelope: HotStuffEnvelope,
+    ) -> Result<(), std::io::Error> {
+        let HotStuffEnvelope { msg, from: sender } = msg_envelope;
         if self.sync_view(&msg) {
             // replica_debug!(
             //     self.node_id,
@@ -635,7 +638,7 @@ impl HotStuffReplica {
             // );
         }
 
-        self.messages.push(msg.clone());
+        self.messages.push(msg.clone(), sender);
 
         let leader = self.pacemaker.current_leader();
         let is_leader = self.node_id == leader;
@@ -657,8 +660,9 @@ impl HotStuffReplica {
 
             // handle leader's msg as replica
             // Dont send to same channel to prevent data race
-            self.messages.push(leader_outbound_msg.clone());
-            let replica_outbound_msg_opt = self.replica_handle_message(leader_outbound_msg.clone());
+            self.messages.push(leader_outbound_msg.clone(), sender);
+            let replica_outbound_msg_opt =
+                self.replica_handle_message(leader_outbound_msg.clone(), sender);
 
             let Some(replica_outbound_msg) = replica_outbound_msg_opt else {
                 return Ok(());
@@ -685,7 +689,7 @@ impl HotStuffReplica {
         }
 
         // Handle as replica only
-        let outbound_msg_opt = self.replica_handle_message(msg);
+        let outbound_msg_opt = self.replica_handle_message(msg, sender);
 
         let Some(outbound_msg) = outbound_msg_opt else {
             return Ok(());
@@ -722,7 +726,6 @@ impl HotStuffReplica {
         HotStuffMessage::create_new_view(
             (*self.generic_qc).clone(),
             self.pacemaker.curr_view - 1,
-            self.node_id,
             self.pacemaker.curr_view - 1,
         )
     }
@@ -769,7 +772,11 @@ impl HotStuffReplica {
         replica_log!(self.node_id, "Running replica...");
         loop {
             while let Some(msg) = self.self_messages.pop_front() {
-                self.handle_message(msg).await?;
+                let envelope = HotStuffEnvelope {
+                    from: self.node_id,
+                    msg,
+                };
+                self.handle_message(envelope).await?;
             }
 
             // Refresh pacemaker timer dynamically each loop

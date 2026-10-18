@@ -3,7 +3,7 @@ use std::io;
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    hotstuff::message::HotStuffMessage,
+    hotstuff::message::HotStuffEnvelope,
     networking::message_protocol::{AppMessage, ControlMessage},
     node::{client::handler::QueryRequest, state::PeerId},
 };
@@ -14,16 +14,16 @@ use super::transaction::SignedTransaction;
 pub enum Message {
     Connection(ControlMessage),
     Application(AppMessage),
-    HotStuff(HotStuffMessage),
+    HotStuff(HotStuffEnvelope),
 }
 
 pub enum ReplicaOutbound {
-    Broadcast(HotStuffMessage),
-    SendTo(PeerId, HotStuffMessage),
+    Broadcast(HotStuffEnvelope),
+    SendTo(PeerId, HotStuffEnvelope),
 }
 
 pub enum ReplicaInBound {
-    HotStuff(HotStuffMessage),
+    HotStuff(HotStuffEnvelope),
     Transaction(SignedTransaction),
     Query(QueryRequest),
 }

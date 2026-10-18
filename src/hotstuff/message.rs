@@ -42,29 +42,31 @@ pub enum Phase {
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+pub struct HotStuffEnvelope {
+    pub from: PeerId,
+    pub msg: HotStuffMessage,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 pub enum HotStuffMessage {
     Proposal {
         node: Block,
         view: ViewNumber,
-        sender: PeerId,
         sender_view: ViewNumber,
     },
     Vote {
-        node: Block,
+        block_hash: BlockHash,
         partial_sig: PartialSig,
         view: ViewNumber,
-        sender: PeerId,
         sender_view: ViewNumber,
     },
     NewView {
         justify: QuorumCertificate,
         view: ViewNumber,
-        sender: PeerId,
         sender_view: ViewNumber,
     },
 }
 
-// Hashable message should only contain these two fields
 #[derive(Serialize, Deserialize)]
 pub struct HashableMessage {
     view_number: ViewNumber,
@@ -76,42 +78,30 @@ impl HotStuffMessage {
     pub fn create_new_view(
         justify: QuorumCertificate,
         view: ViewNumber,
-        sender: PeerId,
         sender_view: ViewNumber,
     ) -> Self {
         Self::NewView {
             justify,
             view,
-            sender,
             sender_view,
         }
     }
 
-    pub fn create_proposal(
-        node: Block,
-        view: ViewNumber,
-        sender: PeerId,
-        sender_view: ViewNumber,
-    ) -> Self {
+    pub fn create_proposal(node: Block, view: ViewNumber, sender_view: ViewNumber) -> Self {
         Self::Proposal {
             node,
             view,
-            sender,
             sender_view,
         }
     }
 
     pub fn create_vote(
-        node: Block,
+        block_hash: BlockHash,
         view: ViewNumber,
-        sender: PeerId,
         sender_view: ViewNumber,
         signing_key: &mut SigningKey,
     ) -> Self {
-        let unsigned_vote = UnsignedVote {
-            block_hash: node.hash(),
-            view,
-        };
+        let unsigned_vote = UnsignedVote { block_hash, view };
 
         let signed_vote = unsigned_vote.hash();
         let signature = signing_key.sign(&signed_vote);
@@ -122,10 +112,9 @@ impl HotStuffMessage {
         };
 
         HotStuffMessage::Vote {
-            node,
+            block_hash,
             partial_sig,
             view,
-            sender,
             sender_view,
         }
     }
@@ -137,9 +126,11 @@ impl HotStuffMessage {
                 block_hash: node.hash(),
                 quorum_hash: QuorumCertificateHash::default(),
             },
-            HotStuffMessage::Vote { view, node, .. } => HashableMessage {
+            HotStuffMessage::Vote {
+                view, block_hash, ..
+            } => HashableMessage {
                 view_number: *view,
-                block_hash: node.hash(),
+                block_hash: *block_hash,
                 quorum_hash: QuorumCertificateHash::default(),
             },
             HotStuffMessage::NewView { justify, view, .. } => HashableMessage {
@@ -159,13 +150,6 @@ impl HotStuffMessage {
         | HotStuffMessage::NewView { view, .. }) = self;
 
         *view
-    }
-
-    pub fn get_sender(&self) -> PeerId {
-        let (HotStuffMessage::Proposal { sender, .. }
-        | HotStuffMessage::Vote { sender, .. }
-        | HotStuffMessage::NewView { sender, .. }) = self;
-        *sender
     }
 
     pub fn get_sender_view(&self) -> ViewNumber {

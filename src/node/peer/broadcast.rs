@@ -3,7 +3,7 @@ use std::{io::Result, sync::Arc};
 use futures::future::join_all;
 
 use crate::{
-    hotstuff::message::HotStuffMessage,
+    hotstuff::message::HotStuffEnvelope,
     networking::message_protocol::{send_message, send_transaction},
     node::state::{Node, PeerId},
     types::{message::Message, transaction::SignedTransaction},
@@ -12,7 +12,7 @@ use crate::{
 /// Broadcast msg to all peer connections
 pub(crate) async fn broadcast_hotstuff_message(
     node: &Arc<Node>,
-    msg: HotStuffMessage,
+    msg: HotStuffEnvelope,
 ) -> Result<()> {
     let peer_connections = node.get_peer_connections_as_vec().await;
 
@@ -28,7 +28,7 @@ pub(crate) async fn broadcast_hotstuff_message(
 
 pub(crate) async fn send_to_peer(
     node: &Arc<Node>,
-    msg: HotStuffMessage,
+    msg: HotStuffEnvelope,
     peer_id: PeerId,
 ) -> Result<()> {
     let peer_connection = {

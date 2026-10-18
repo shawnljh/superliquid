@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
 use crate::{
-    hotstuff::message::{HashableMessage, HotStuffMessage, UnsignedVote},
+    hotstuff::message::UnsignedVote,
     types::{consensus::ViewNumber, transaction::Sha256Hash},
 };
 
