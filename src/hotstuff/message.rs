@@ -101,7 +101,7 @@ impl HotStuffMessage {
         sender_view: ViewNumber,
         signing_key: &mut SigningKey,
     ) -> Self {
-        let unsigned_vote = UnsignedVote { block_hash, view };
+        let unsigned_vote = UnsignedVote::new(view, block_hash);
 
         let signed_vote = unsigned_vote.hash();
         let signature = signing_key.sign(&signed_vote);

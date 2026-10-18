@@ -58,6 +58,21 @@ pub fn retrieve_validator_set() -> HashSet<VerifyingKey> {
     validator_set
 }
 
+pub fn retrieve_validators() -> Vec<VerifyingKey> {
+    dotenv().ok();
+    let num_validators = self::retrieve_num_validators();
+    let mut validators = Vec::new();
+    for i in 0..num_validators {
+        let env_key = format!("PUBLIC_KEY_{}", i);
+        let pk_hex = env::var(&env_key).expect(&format!("{} not set", &env_key));
+
+        let pk_bytes = <[u8; 32]>::from_hex(&pk_hex).expect("Invalid hex");
+        let pk = VerifyingKey::from_bytes(&pk_bytes).expect("Invalid public key bytes");
+        validators[i] = pk;
+    }
+    validators
+}
+
 pub fn retrieve_faucet_keys() -> (VerifyingKey, SigningKey) {
     dotenv().ok();
     let env_key = format!("FAUCET_PK");

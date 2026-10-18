@@ -13,7 +13,7 @@ use tokio::{
 use crate::{
     config,
     hotstuff::{
-        message::{HotStuffEnvelope, Phase},
+        message::{HotStuffEnvelope, Phase, UnsignedVote},
         utils,
     },
     node::client::handler::QueryRequest,
@@ -54,6 +54,7 @@ impl ViewProgress {
 pub struct HotStuffReplica {
     pub node_id: usize,
     pub validator_set: HashSet<VerifyingKey>,
+    pub validators: Vec<VerifyingKey>,
     signing_key: SigningKey,
 
     // Arc is needed as we are sending our replica across threads
@@ -97,6 +98,7 @@ impl HotStuffReplica {
         let genesis_qc = Arc::new(genesis_qc);
         HotStuffReplica {
             node_id,
+            validators: config::retrieve_validators(),
             validator_set: config::retrieve_validator_set(),
             signing_key,
 
@@ -133,6 +135,37 @@ impl HotStuffReplica {
             self.pacemaker.curr_view,
             &mut self.signing_key,
         )
+    }
+
+    pub fn validate_message(&self, envelope: &HotStuffEnvelope) -> bool {
+        let HotStuffEnvelope { msg, from } = envelope;
+        match msg {
+            HotStuffMessage::Vote {
+                block_hash,
+                partial_sig,
+                view,
+                sender_view: _sender_view,
+            } => {
+                if let Some(pk) = self.validators.get(*from)
+                    && pk == &partial_sig.signer_id
+                {
+                    return pk
+                        .verify_strict(
+                            &UnsignedVote::new(*view, *block_hash).hash(),
+                            &partial_sig.signature,
+                        )
+                        .is_ok();
+                }
+                false
+            }
+            HotStuffMessage::NewView { justify, .. } => {
+                if *justify == *self.generic_qc {
+                    return true;
+                }
+                justify.verify(&self.validator_set, self.quorum_threshold())
+            }
+            _ => true,
+        }
     }
 
     pub fn matching_message(message: HotStuffMessage, view_number: ViewNumber) -> bool {
@@ -610,6 +643,10 @@ impl HotStuffReplica {
         &mut self,
         msg_envelope: HotStuffEnvelope,
     ) -> Result<(), std::io::Error> {
+        if !self.validate_message(&msg_envelope) {
+            return Ok(());
+        }
+
         let HotStuffEnvelope { msg, from: sender } = msg_envelope;
         if self.sync_view(&msg) {
             // replica_debug!(
@@ -637,6 +674,8 @@ impl HotStuffReplica {
             //     msg.sender
             // );
         }
+
+        // INVARAINT: every message is validated
 
         self.messages.push(msg.clone(), sender);
 
