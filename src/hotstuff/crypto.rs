@@ -5,7 +5,10 @@ use ed25519_dalek::VerifyingKey;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
-use crate::types::{consensus::ViewNumber, transaction::Sha256Hash};
+use crate::{
+    hotstuff::message::{HashableMessage, HotStuffMessage, UnsignedVote},
+    types::{consensus::ViewNumber, transaction::Sha256Hash},
+};
 
 use super::{block::BlockHash, hexstring};
 
@@ -106,35 +109,49 @@ impl QuorumCertificate {
         }
     }
 
+    // Verifies that the QC is valid
+    // - Passes if
+    //   Is Genesis QC
+    //   OR (
+    //     expected message_hash (block_hash + view_number) matches the hash that the signers signed
+    //     AND
+    //     valid signaures >= qourum threshold (n - f)
+    //   )
     pub fn verify(&self, validator_set: &HashSet<VerifyingKey>, quorum_size: usize) -> bool {
-        let mut unique_signers = HashSet::new();
-
-        let mut valid_sig_count = 0;
-
         if self.view_number == 0 && self.block_hash == Self::GENESIS_BLOCK_HASH {
             // Genesis QC
             return true;
         }
 
+        let vote = UnsignedVote::new(self.view_number, self.block_hash);
+        let expected_message_hash = vote.hash();
+
+        if expected_message_hash != self.message_hash {
+            return false;
+        }
+
+        let mut unique_signers = HashSet::new();
+        let mut valid_sig_count = 0;
+
         for sig in &self.partial_sigs {
+            if valid_sig_count >= quorum_size {
+                return true;
+            }
             let pk = &sig.signer_id;
-            // count signatures only from known validators
             if !validator_set.contains(pk) {
                 continue;
             }
 
-            if !unique_signers.insert(pk) {
+            if unique_signers.contains(pk) {
                 continue;
             }
 
-            // verify that signatures are valid
-            if pk.verify_strict(&self.message_hash, &sig.signature).is_ok() {
+            if pk
+                .verify_strict(&expected_message_hash, &sig.signature)
+                .is_ok()
+            {
                 valid_sig_count += 1;
-            } else {
-                println!(
-                    "Not valid {:?} {:?}. pk: {:?}",
-                    self.message_hash, sig.signature, pk,
-                )
+                unique_signers.insert(pk);
             }
         }
 
@@ -161,10 +178,10 @@ mod tests {
     use std::collections::HashSet;
 
     use ed25519::signature::SignerMut;
-    use ed25519_dalek::SigningKey;
+    use ed25519_dalek::{SigningKey, VerifyingKey};
 
     use crate::{
-        hotstuff::crypto::PartialSig,
+        hotstuff::{block::BlockHash, crypto::PartialSig, message::UnsignedVote},
         types::{consensus::ViewNumber, transaction::Sha256Hash},
     };
 
@@ -191,6 +208,49 @@ mod tests {
         }
     }
 
+    // ---- helpers ----
+
+    const VIEW: ViewNumber = 5;
+    const BLOCK: BlockHash = [3u8; 32];
+
+    /// Deterministic signing keys, seeded 1..=n.
+    fn keys(n: u8) -> Vec<SigningKey> {
+        (1..=n)
+            .map(|seed| SigningKey::from_bytes(&[seed; 32]))
+            .collect()
+    }
+
+    fn validator_set(keys: &[SigningKey]) -> HashSet<VerifyingKey> {
+        keys.iter().map(|k| k.verifying_key()).collect()
+    }
+
+    fn vote_hash(view: ViewNumber, block_hash: BlockHash) -> Sha256Hash {
+        UnsignedVote::new(view, block_hash).hash()
+    }
+
+    fn sign(key: &mut SigningKey, msg: &Sha256Hash) -> PartialSig {
+        PartialSig::new(key.verifying_key(), key.sign(msg))
+    }
+
+    /// A correctly formed QC for (view, block_hash), signed by every key in `signers`.
+    fn signed_qc(
+        signers: &mut [SigningKey],
+        view: ViewNumber,
+        block_hash: BlockHash,
+    ) -> QuorumCertificate {
+        let message_hash = vote_hash(view, block_hash);
+        let partial_sigs = signers.iter_mut().map(|k| sign(k, &message_hash)).collect();
+
+        QuorumCertificate {
+            view_number: view,
+            block_hash,
+            message_hash,
+            partial_sigs,
+        }
+    }
+
+    // ---- genesis ----
+
     #[test]
     fn test_create_genesis_qc_defaults() {
         let qc = QuorumCertificate::create_genesis_qc();
@@ -207,75 +267,134 @@ mod tests {
     }
 
     #[test]
-    fn test_verify_qc_with_valid_sigs() {
-        let mut sk1 = SigningKey::generate(&mut rand::rngs::OsRng);
-        let pk1 = sk1.verifying_key();
-        let message_hash = Sha256Hash::from([2u8; 32]);
-        let sig1 = sk1.sign(&message_hash);
+    fn verify_accepts_genesis_qc() {
+        let qc = QuorumCertificate::create_genesis_qc();
+        assert!(qc.verify(&HashSet::new(), 3));
+    }
 
-        let mut sk2 = SigningKey::generate(&mut rand::rngs::OsRng);
-        let pk2 = sk2.verifying_key();
-        let sig2 = sk2.sign(&message_hash);
+    // ---- valid QCs ----
 
-        let mut sk3 = SigningKey::generate(&mut rand::rngs::OsRng);
-        let pk3 = sk3.verifying_key();
-        let sig3 = sk3.sign(&message_hash);
+    #[test]
+    fn verify_accepts_exact_quorum() {
+        let mut keys = keys(4);
+        let validators = validator_set(&keys);
+        let qc = signed_qc(&mut keys[..3], VIEW, BLOCK);
 
-        let sk4 = SigningKey::generate(&mut rand::rngs::OsRng);
-        let pk4 = sk4.verifying_key();
-
-        let partials = vec![
-            PartialSig::new(pk1, sig1),
-            PartialSig::new(pk2, sig2),
-            PartialSig::new(pk3, sig3),
-        ];
-
-        let qc = QuorumCertificate {
-            view_number: 5,
-            block_hash: [3u8; 32],
-            message_hash,
-            partial_sigs: partials.clone(),
-        };
-
-        let mut validator_set = HashSet::new();
-        validator_set.insert(pk1);
-        validator_set.insert(pk2);
-        validator_set.insert(pk3);
-        validator_set.insert(pk4);
-
-        assert!(qc.verify(&validator_set, 3));
-        assert!(!qc.verify(&validator_set, 4)); // not enough
+        assert!(qc.verify(&validators, 3));
+        assert!(!qc.verify(&validators, 4)); // not enough
     }
 
     #[test]
-    fn test_verify_qc_rejects_invalid_sigs() {
-        let mut sk1 = SigningKey::generate(&mut rand::rngs::OsRng);
-        let pk1 = sk1.verifying_key();
+    fn verify_accepts_more_than_quorum() {
+        let mut keys = keys(4);
+        let validators = validator_set(&keys);
+        let qc = signed_qc(&mut keys, VIEW, BLOCK);
 
-        let mut sk2 = SigningKey::generate(&mut rand::rngs::OsRng);
-        let pk2 = sk2.verifying_key();
+        assert!(qc.verify(&validators, 3));
+    }
 
-        let wrong_message = Sha256Hash::from([10u8; 32]);
+    // ---- forged fields ----
 
-        let sig1 = sk1.sign(&Sha256Hash::from([9u8; 32])); // incorrect message
-        let sig2 = sk2.sign(&Sha256Hash::from([8u8; 32])); // incorrect message
+    #[test]
+    fn verify_rejects_forged_view_number() {
+        // Regression: a real QC with its view_number changed must not verify.
+        let mut keys = keys(4);
+        let validators = validator_set(&keys);
+        let mut qc = signed_qc(&mut keys[..3], VIEW, BLOCK);
+        qc.view_number = 1_000_000;
 
-        let partials = vec![PartialSig::new(pk1, sig1), PartialSig::new(pk2, sig2)];
+        assert!(!qc.verify(&validators, 3));
+    }
+
+    #[test]
+    fn verify_rejects_forged_block_hash() {
+        let mut keys = keys(4);
+        let validators = validator_set(&keys);
+        let mut qc = signed_qc(&mut keys[..3], VIEW, BLOCK);
+        qc.block_hash = [9u8; 32];
+
+        assert!(!qc.verify(&validators, 3));
+    }
+
+    #[test]
+    fn verify_rejects_message_hash_for_different_vote() {
+        // Signatures and message_hash agree with each other, but not with (view, block).
+        let mut keys = keys(4);
+        let validators = validator_set(&keys);
+        let other_hash = vote_hash(VIEW + 1, BLOCK);
+        let partial_sigs = keys[..3].iter_mut().map(|k| sign(k, &other_hash)).collect();
 
         let qc = QuorumCertificate {
-            view_number: 2,
-            block_hash: [11u8; 32],
-            message_hash: wrong_message,
-            partial_sigs: partials,
+            view_number: VIEW,
+            block_hash: BLOCK,
+            message_hash: other_hash,
+            partial_sigs,
         };
 
-        let mut validator_set = HashSet::new();
-        validator_set.insert(pk1);
-        validator_set.insert(pk2);
-
-        assert!(!qc.verify(&validator_set, 1));
-        assert!(!qc.verify(&validator_set, 2));
+        assert!(!qc.verify(&validators, 3));
     }
+
+    #[test]
+    fn verify_rejects_signatures_over_wrong_message() {
+        let mut keys = keys(4);
+        let validators = validator_set(&keys);
+        let wrong = Sha256Hash::from([9u8; 32]);
+        let partial_sigs = keys[..3].iter_mut().map(|k| sign(k, &wrong)).collect();
+
+        let qc = QuorumCertificate {
+            view_number: VIEW,
+            block_hash: BLOCK,
+            message_hash: vote_hash(VIEW, BLOCK),
+            partial_sigs,
+        };
+
+        assert!(!qc.verify(&validators, 1));
+    }
+
+    // ---- counting rules ----
+
+    #[test]
+    fn verify_ignores_signers_outside_validator_set() {
+        let mut keys = keys(5);
+        let validators = validator_set(&keys[..3]); // seeds 1, 2, 3
+        let qc = signed_qc(&mut keys[1..], VIEW, BLOCK); // seeds 2..=5, only 2 and 3 count
+
+        assert!(qc.verify(&validators, 2));
+        assert!(!qc.verify(&validators, 3));
+    }
+
+    #[test]
+    fn verify_counts_duplicate_signer_once() {
+        let mut keys = keys(4);
+        let validators = validator_set(&keys);
+        let hash = vote_hash(VIEW, BLOCK);
+        let sig = sign(&mut keys[0], &hash);
+
+        let qc = QuorumCertificate {
+            view_number: VIEW,
+            block_hash: BLOCK,
+            message_hash: hash,
+            partial_sigs: vec![sig.clone(), sig.clone(), sig],
+        };
+
+        assert!(qc.verify(&validators, 1));
+        assert!(!qc.verify(&validators, 2));
+    }
+
+    #[test]
+    fn verify_invalid_signature_does_not_block_signers_valid_one() {
+        // Regression: a relayer inserts a garbage signature for an honest signer
+        // ahead of their real one. The real one must still count.
+        let mut keys = keys(4);
+        let validators = validator_set(&keys);
+        let mut qc = signed_qc(&mut keys[..3], VIEW, BLOCK);
+        let garbage = sign(&mut keys[0], &Sha256Hash::from([9u8; 32]));
+        qc.partial_sigs.insert(0, garbage);
+
+        assert!(qc.verify(&validators, 3));
+    }
+
+    // ---- serialization ----
 
     #[test]
     fn test_signature_serialization_round_trip() {
@@ -286,10 +405,7 @@ mod tests {
 
         let partialsig = PartialSig::new(verifying_key, signature);
 
-        // Serialize
         let json = serde_json::to_string(&partialsig).expect("Failed to serialize signature");
-
-        // Deserialize
         let deserialized: PartialSig =
             serde_json::from_str(&json).expect("Failed to deserialize signature");
 
@@ -297,7 +413,6 @@ mod tests {
             partialsig.signature.to_bytes(),
             deserialized.signature.to_bytes()
         );
-
         assert_eq!(
             partialsig.signer_id.to_bytes(),
             deserialized.signer_id.to_bytes()

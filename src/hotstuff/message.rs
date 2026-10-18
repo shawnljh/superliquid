@@ -12,16 +12,20 @@ use crate::{
     types::{consensus::ViewNumber, transaction::Sha256Hash},
 };
 
-pub struct UnsignedVote<'a> {
-    node: &'a Block,
+pub struct UnsignedVote {
+    block_hash: BlockHash,
     view: ViewNumber,
 }
 
-impl<'a> UnsignedVote<'a> {
+impl UnsignedVote {
+    pub fn new(view: ViewNumber, block_hash: BlockHash) -> Self {
+        Self { block_hash, view }
+    }
+
     pub fn hash(&self) -> Sha256Hash {
         let hashable = HashableMessage {
             view_number: self.view,
-            block_hash: self.node.hash(),
+            block_hash: self.block_hash,
             quorum_hash: QuorumCertificateHash::default(),
         };
 
@@ -104,10 +108,13 @@ impl HotStuffMessage {
         sender_view: ViewNumber,
         signing_key: &mut SigningKey,
     ) -> Self {
-        let unsigned_vote = UnsignedVote { node: &node, view };
+        let unsigned_vote = UnsignedVote {
+            block_hash: node.hash(),
+            view,
+        };
 
-        let message_hash = unsigned_vote.hash();
-        let signature = signing_key.sign(&message_hash);
+        let signed_vote = unsigned_vote.hash();
+        let signature = signing_key.sign(&signed_vote);
 
         let partial_sig = PartialSig {
             signer_id: signing_key.verifying_key(),
