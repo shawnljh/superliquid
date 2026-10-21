@@ -21,11 +21,14 @@ pub struct Pacemaker {
 }
 
 impl Pacemaker {
+    // Genesis block is 0, so first real view should be 1
+    const FIRST_VIEW: ViewNumber = 1;
+
     pub(crate) fn new() -> Self {
         let replica_len = config::retrieve_num_validators();
         let replica_ids = (0..replica_len).collect();
         Self {
-            curr_view: 0,
+            curr_view: Pacemaker::FIRST_VIEW,
             last_commited_view: 0,
             timeout: config::retrieve_tick_duration(),
             timeout_multiplicative_factor: config::retrieve_multiplicative_factor(),
@@ -79,6 +82,10 @@ impl Pacemaker {
     }
 
     pub(crate) fn current_leader(&self) -> usize {
+        self.replica_ids[(self.curr_view as usize) % self.replica_ids.len()]
+    }
+
+    pub(crate) fn get_leader_for_curr_view(&self) -> usize {
         self.replica_ids[(self.curr_view as usize) % self.replica_ids.len()]
     }
 

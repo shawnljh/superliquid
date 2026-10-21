@@ -68,7 +68,7 @@ pub fn retrieve_validators() -> Vec<VerifyingKey> {
 
         let pk_bytes = <[u8; 32]>::from_hex(&pk_hex).expect("Invalid hex");
         let pk = VerifyingKey::from_bytes(&pk_bytes).expect("Invalid public key bytes");
-        validators[i] = pk;
+        validators.push(pk);
     }
     validators
 }

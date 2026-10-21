@@ -111,7 +111,7 @@ impl HotStuffReplica {
             pending_transactions: HashMap::new(),
             committed_transactions: HashMap::new(),
 
-            // TODO: pass in config
+            // TODO: pass in config + max view lookahead
             messages: MessageWindow::new(0, 100),
             // We only expect to handle a handle full of self-messages at once
             self_messages: VecDeque::with_capacity(8),
@@ -137,6 +137,7 @@ impl HotStuffReplica {
         )
     }
 
+    // Validate that hotstuff message is not spoofed
     pub fn validate_message(&self, envelope: &HotStuffEnvelope) -> bool {
         let HotStuffEnvelope { msg, from } = envelope;
         match msg {
@@ -305,18 +306,14 @@ impl HotStuffReplica {
     }
 
     fn add_block_transactions_to_committed(&mut self, block: &Block) {
-        let transactions = block.transactions();
-
-        for transaction in transactions.iter() {
+        for transaction in block.transactions().iter() {
             self.committed_transactions
                 .insert(transaction.hash, transaction.clone());
         }
     }
 
     fn remove_block_transactions_from_pending(&mut self, block: &Block) {
-        let transactions = block.transactions();
-
-        for transaction in transactions.iter() {
+        for transaction in block.transactions().iter() {
             self.pending_transactions.remove_entry(&transaction.hash);
         }
     }
@@ -326,15 +323,20 @@ impl HotStuffReplica {
         replica_log!(
             self.node_id,
             "Leader handle message at view: {:?}",
-            curr_view
+            curr_view,
         );
 
         self.pacemaker.reset_timer();
 
         let view_messages = self
             .messages
-            .get_phase_messages_for_view(curr_view, Phase::NewView);
+            .get_phase_messages_for_view(curr_view - 1, Phase::NewView);
 
+        replica_log!(
+            self.node_id,
+            "leader new_view len: {:?}",
+            view_messages.as_ref().map(|m| m.len())
+        );
         if let Some(msgs) = view_messages
             && msgs.len() >= self.quorum_threshold()
         {
@@ -435,8 +437,7 @@ impl HotStuffReplica {
         node: Block,
         sender: usize,
     ) -> Option<HotStuffMessage> {
-        let curr_view = self.pacemaker.curr_view;
-        if sender != self.pacemaker.get_leader_for_view(curr_view) {
+        if sender != self.pacemaker.get_leader_for_curr_view() {
             // Ignore messages not from leader of the current view
             // replica_debug!(
             //     self.node_id,
@@ -550,7 +551,11 @@ impl HotStuffReplica {
             b
         };
 
-        replica_log!(self.node_id, "Commit success on view: {:?}", curr_view);
+        replica_log!(
+            self.node_id,
+            "Commit success on view: {:?}",
+            self.pacemaker.curr_view
+        );
         // replica_debug!(
         //     self.node_id,
         //     self.pacemaker.curr_view,
@@ -665,17 +670,7 @@ impl HotStuffReplica {
             }
         }
 
-        if msg.get_view_number() + 1 < self.pacemaker.curr_view {
-            // replica_debug!(
-            //     self.node_id,
-            //     self.pacemaker.curr_view,
-            //     "Recieved stale message from view: {:?} from node: {:?}",
-            //     msg.view_number,
-            //     msg.sender
-            // );
-        }
-
-        // INVARAINT: every message is validated
+        // INVARIANT: Every message from here should be validated
 
         self.messages.push(msg.clone(), sender);
 
@@ -699,9 +694,10 @@ impl HotStuffReplica {
 
             // handle leader's msg as replica
             // Dont send to same channel to prevent data race
-            self.messages.push(leader_outbound_msg.clone(), sender);
+            self.messages
+                .push(leader_outbound_msg.clone(), self.node_id);
             let replica_outbound_msg_opt =
-                self.replica_handle_message(leader_outbound_msg.clone(), sender);
+                self.replica_handle_message(leader_outbound_msg.clone(), self.node_id);
 
             let Some(replica_outbound_msg) = replica_outbound_msg_opt else {
                 return Ok(());
@@ -798,6 +794,7 @@ impl HotStuffReplica {
     }
 
     async fn advance_view(&mut self) -> Result<(), std::io::Error> {
+        self.messages.prune_before_view(self.pacemaker.curr_view);
         self.pacemaker.advance_view();
         self.view_progress.reset();
         self.send_new_view_to_leader().await?;
