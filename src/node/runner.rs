@@ -80,6 +80,8 @@ pub(crate) async fn deduplicate_peer_connection(
     }
 }
 
+// TODO: Peer connections are currently assumed to be mutually authenticated and protected.
+// Not yet implemented: the current handshake is unauthenticated
 pub(crate) async fn connect_to_peer(addr: String, peer_id: usize, node: Arc<Node>) {
     let base: u32 = 100;
     let mut counts: u32 = 1;
@@ -119,6 +121,7 @@ pub(crate) async fn connect_to_peer(addr: String, peer_id: usize, node: Arc<Node
                 break;
             }
             Err(e) => {
+                // Retry with exponential backoff
                 logger.log("error", &format!("Failed to connect to {}: {:?}", addr, e));
                 let exp_duration = base.pow(counts);
                 let sleep_duration = exp_duration.min(max_sleep);

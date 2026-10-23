@@ -332,11 +332,6 @@ impl HotStuffReplica {
             .messages
             .get_phase_messages_for_view(curr_view - 1, Phase::NewView);
 
-        replica_log!(
-            self.node_id,
-            "leader new_view len: {:?}",
-            view_messages.as_ref().map(|m| m.len())
-        );
         if let Some(msgs) = view_messages
             && msgs.len() >= self.quorum_threshold()
         {
