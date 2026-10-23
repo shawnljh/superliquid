@@ -110,9 +110,9 @@ mod tests {
     use std::thread::sleep;
 
     #[test]
-    fn test_new_pacemaker_starts_at_view_zero() {
+    fn test_new_pacemaker_starts_at_first_view() {
         let pacemaker = Pacemaker::new();
-        assert_eq!(pacemaker.curr_view, 0);
+        assert_eq!(pacemaker.curr_view, Pacemaker::FIRST_VIEW);
         assert_eq!(
             pacemaker.replica_ids.len(),
             config::retrieve_num_validators()
@@ -127,9 +127,10 @@ mod tests {
 
     #[test]
     fn test_should_advance_view_after_timeout() {
-        let pacemaker = Pacemaker::new();
-        // simulate passage of time
-        sleep(pacemaker.timeout + std::time::Duration::from_millis(10));
+        let mut pacemaker = Pacemaker::new();
+        pacemaker.base_timeout = Duration::from_millis(10);
+
+        sleep(pacemaker.get_current_timeout() + Duration::from_millis(10));
         assert!(pacemaker.should_advance_view());
     }
 
@@ -137,8 +138,11 @@ mod tests {
     fn test_advance_view_increments_view_and_resets_timer() {
         let mut pacemaker = Pacemaker::new();
         let initial_time = pacemaker.last_view_change;
+        sleep(Duration::from_millis(1));
+
         pacemaker.advance_view();
-        assert_eq!(pacemaker.curr_view, 1);
+
+        assert_eq!(pacemaker.curr_view, Pacemaker::FIRST_VIEW + 1);
         assert!(pacemaker.last_view_change > initial_time);
     }
 
