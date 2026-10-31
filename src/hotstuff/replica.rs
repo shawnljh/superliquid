@@ -818,7 +818,11 @@ impl HotStuffReplica {
             tokio::select! {
                 Some(msg) = to_replica_rx.recv() => {
                     match msg {
-                        ReplicaInBound::HotStuff(msg) => self.handle_message(msg).await?,
+                        ReplicaInBound::HotStuff(msg) => {
+                            if let Err(e) = self.handle_message(msg).await {
+                                    replica_log!(self.node_id, "handle_message failed at view {:?}: {:?}", self.pacemaker.curr_view, e);
+                            }
+                        },
                         ReplicaInBound::Transaction(tx) => self.handle_transaction(tx),
                         ReplicaInBound::Query(query) => self.handle_query(query),
                     }
