@@ -7,7 +7,10 @@ use tokio::{
 
 use crate::{
     config,
-    hotstuff::replica::HotStuffReplica,
+    hotstuff::{
+        message::{HotStuffEnvelope, HotStuffMessage},
+        replica::HotStuffReplica,
+    },
     networking::message_protocol::send_hello,
     types::message::{ReplicaInBound, ReplicaOutbound},
 };
@@ -31,10 +34,20 @@ async fn spawn_all_node_tasks(
     consensus_addr: String,
     mut replica: HotStuffReplica,
     node: Arc<Node>,
-    to_replica_tx: mpsc::Sender<ReplicaInBound>,
-    to_replica_rx: mpsc::Receiver<ReplicaInBound>,
     from_replica_rx: mpsc::Receiver<ReplicaOutbound>,
 ) -> Result<()> {
+    // Sends messages to hotsutff replica from networking thread
+    let (to_replica_tx, to_replica_rx): (
+        mpsc::Sender<ReplicaInBound>,
+        mpsc::Receiver<ReplicaInBound>,
+    ) = mpsc::channel(1024);
+
+    // Recieves consensus messages to hotsutff replica from networking thread
+    let (to_replica_consensus_tx, to_replica_consensus_rx): (
+        mpsc::Sender<HotStuffEnvelope>,
+        mpsc::Receiver<HotStuffEnvelope>,
+    ) = mpsc::channel(1024);
+
     let handles = vec![
         tokio::spawn(run_client_listener(
             client_addr.to_owned(),
@@ -45,10 +58,15 @@ async fn spawn_all_node_tasks(
             node.clone(),
             consensus_addr.to_owned(),
             to_replica_tx.clone(),
+            to_replica_consensus_tx.clone(),
         )),
     ];
 
-    tokio::spawn(async move { replica.run_replica(to_replica_rx).await });
+    tokio::spawn(async move {
+        replica
+            .run_replica(to_replica_rx, to_replica_consensus_rx)
+            .await
+    });
     tokio::spawn(handle_replica_outbound(from_replica_rx, node.clone()));
 
     let _ = join_all(handles).await;
@@ -167,29 +185,20 @@ pub async fn run_node(
     });
     connect_to_peers_background(&peers, &node).await;
 
-    // Sends messages to replica from node
-    let (to_replica_tx, to_replica_rx): (
-        mpsc::Sender<ReplicaInBound>,
-        mpsc::Receiver<ReplicaInBound>,
-    ) = mpsc::channel(1024);
-
-    // Recieves messages from replica to node
+    // Recieves messages from hotsutff replica to networking thread
     let (from_replica_tx, from_replica_rx): (
         mpsc::Sender<ReplicaOutbound>,
         mpsc::Receiver<ReplicaOutbound>,
     ) = mpsc::channel(1024);
 
-    let replica = HotStuffReplica::new(node_index, to_replica_tx.clone(), from_replica_tx);
+    // Recieves consensus messages to hotsutff replica from networking thread
+    let (from_replica_consensus_tx, from_replica_consensus_rx): (
+        mpsc::Sender<HotStuffEnvelope>,
+        mpsc::Receiver<HotStuffEnvelope>,
+    ) = mpsc::channel(1024);
 
-    let _ = spawn_all_node_tasks(
-        client_addr,
-        consensus_addr,
-        replica,
-        node,
-        to_replica_tx,
-        to_replica_rx,
-        from_replica_rx,
-    )
-    .await;
+    let replica = HotStuffReplica::new(node_index, from_replica_tx);
+
+    let _ = spawn_all_node_tasks(client_addr, consensus_addr, replica, node, from_replica_rx).await;
     Ok(())
 }

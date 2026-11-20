@@ -7,6 +7,7 @@ use tokio::{
 };
 
 use crate::{
+    hotstuff::message::{HotStuffEnvelope, HotStuffMessage},
     node::{
         peer::handler::{handle_handshake, handle_peer_connection},
         runner::deduplicate_peer_connection,
@@ -33,6 +34,7 @@ pub(crate) async fn run_peer_listener(
     concensus_addr: String,
     // peer: PeerInfo,
     to_replica_tx: mpsc::Sender<ReplicaInBound>,
+    to_replica_consensus_tx: mpsc::Sender<HotStuffEnvelope>,
 ) -> Result<()> {
     let peer_listener: TcpListener = TcpListener::bind(&concensus_addr).await?;
     let logger = node.logger.clone();
@@ -56,7 +58,8 @@ pub(crate) async fn run_peer_listener(
                 continue;
             }
         };
-        let tx_clone = to_replica_tx.clone();
+        let replica_tx_clone = to_replica_tx.clone();
+        let consensus_tx_clone = to_replica_consensus_tx.clone();
         let node_clone = node.clone();
         logger.log("Info", "Spawning peer listener");
         let logger = logger.clone();
@@ -85,7 +88,14 @@ pub(crate) async fn run_peer_listener(
             };
 
             let peer_socket = deduplicate_peer_connection(peer_socket, &node_clone, peer_id).await;
-            match handle_peer_connection(&node_clone, peer_socket.reader.clone(), tx_clone).await {
+            match handle_peer_connection(
+                &node_clone,
+                peer_socket.reader.clone(),
+                replica_tx_clone,
+                consensus_tx_clone,
+            )
+            .await
+            {
                 Ok(()) => logger.log("info", "Successfully handled peer connection"),
                 Err(e) => logger.log("Error", &format!("Peer listener: Failed due to: {:?}", e)),
             }

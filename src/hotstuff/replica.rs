@@ -14,7 +14,7 @@ use crate::{
     config,
     hotstuff::{
         message::{HotStuffEnvelope, Phase, UnsignedVote},
-        utils,
+        utils::{self, ConsensusBudget},
     },
     node::client::handler::QueryRequest,
     replica_debug, replica_log,
@@ -55,6 +55,7 @@ pub struct HotStuffReplica {
     pub node_id: usize,
     pub validator_set: HashSet<VerifyingKey>,
     pub validators: Vec<VerifyingKey>,
+    consensus_budget: ConsensusBudget,
     signing_key: SigningKey,
 
     // Arc is needed as we are sending our replica across threads
@@ -81,11 +82,7 @@ pub struct HotStuffReplica {
 }
 
 impl HotStuffReplica {
-    pub fn new(
-        node_id: usize,
-        replica_tx: mpsc::Sender<ReplicaInBound>,
-        node_tx: mpsc::Sender<ReplicaOutbound>,
-    ) -> Self {
+    pub fn new(node_id: usize, node_tx: mpsc::Sender<ReplicaOutbound>) -> Self {
         let signing_key = config::retrieve_signing_key_checked(node_id);
 
         let (genesis_block, genesis_qc) = Block::create_genesis_block();
@@ -101,6 +98,7 @@ impl HotStuffReplica {
             validators: config::retrieve_validators(),
             validator_set: config::retrieve_validator_set(),
             signing_key,
+            consensus_budget: ConsensusBudget::new(config::retrieve_consensus_budget()),
 
             generic_qc: genesis_qc.clone(),
             locked_qc: genesis_qc,
@@ -117,7 +115,7 @@ impl HotStuffReplica {
             self_messages: VecDeque::with_capacity(8),
 
             pacemaker: Pacemaker::new(),
-            rep_node_channel: ReplicaSender::new(node_id, replica_tx, node_tx),
+            rep_node_channel: ReplicaSender::new(node_id, node_tx),
 
             ledger_state: LedgerState::new(),
 
@@ -799,6 +797,7 @@ impl HotStuffReplica {
     pub async fn run_replica(
         &mut self,
         mut to_replica_rx: mpsc::Receiver<ReplicaInBound>,
+        mut to_replica_concensus_rx: mpsc::Receiver<HotStuffEnvelope>,
     ) -> Result<(), std::io::Error> {
         replica_log!(self.node_id, "Running replica...");
         loop {
@@ -815,24 +814,32 @@ impl HotStuffReplica {
             let pacemaker_timer = sleep(time_remaining);
             pin!(pacemaker_timer);
 
-            tokio::select! {
-                Some(msg) = to_replica_rx.recv() => {
-                    match msg {
-                        ReplicaInBound::HotStuff(msg) => {
-                            if let Err(e) = self.handle_message(msg).await {
-                                    replica_log!(self.node_id, "handle_message failed at view {:?}: {:?}", self.pacemaker.curr_view, e);
-                            }
-                        },
-                        ReplicaInBound::Transaction(tx) => self.handle_transaction(tx),
-                        ReplicaInBound::Query(query) => self.handle_query(query),
-                    }
-                },
+            if self.consensus_budget.is_exhausted() && to_replica_rx.is_empty() {
+                self.consensus_budget.refill();
+            }
 
+            tokio::select! {
+                biased;
                 _ = &mut pacemaker_timer => {
                     if self.pacemaker.should_advance_view() {
                         self.advance_view().await?;
                     }
                 }
+                Some(msg) = to_replica_concensus_rx.recv(), if !self.consensus_budget.is_exhausted() => {
+                    self.consensus_budget.consume();
+                    if let Err(e) = self.handle_message(msg).await {
+                        replica_log!(self.node_id, "handle_message failed at view {:?}: {:?}", self.pacemaker.curr_view, e);
+                    }
+                }
+                Some(msg) = to_replica_rx.recv() => {
+                    self.consensus_budget.refill();
+                    match msg {
+                        ReplicaInBound::Transaction(tx) => self.handle_transaction(tx),
+                        ReplicaInBound::Query(query) => self.handle_query(query),
+                    }
+                },
+
+
             }
         }
     }

@@ -3,6 +3,7 @@ use ed25519_dalek::{SigningKey, VerifyingKey};
 use hex::FromHex;
 use std::collections::HashSet;
 use std::env;
+use std::num::NonZeroUsize;
 use std::time::Duration;
 
 //***/// Loads config from .env file
@@ -88,6 +89,15 @@ pub fn retrieve_faucet_keys() -> (VerifyingKey, SigningKey) {
     let sk = SigningKey::from_bytes(&sk_bytes);
 
     (pk, sk)
+}
+
+pub fn retrieve_consensus_budget() -> NonZeroUsize {
+    dotenv().ok();
+
+    env::var("CONSENSUS_BUDGET")
+        .expect("CONSENSUS_BUDGET not set")
+        .parse::<NonZeroUsize>()
+        .expect("CONSENSUS_BUDGET must be a number")
 }
 
 // PACEMAKER

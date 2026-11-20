@@ -1,9 +1,42 @@
+use std::num::NonZeroUsize;
+
 use crate::types::consensus::ViewNumber;
 
 use super::{crypto::QuorumCertificate, message::HotStuffMessage};
 
 use ed25519::Signature;
 use hex::{decode as hex_decode, encode as hex_encode};
+
+#[derive(Debug)]
+pub(crate) struct ConsensusBudget {
+    curr_budget: usize,
+    default: usize,
+}
+
+impl ConsensusBudget {
+    pub(crate) fn new(consensus_budget: NonZeroUsize) -> Self {
+        Self {
+            curr_budget: consensus_budget.get(),
+            default: consensus_budget.get(),
+        }
+    }
+
+    pub(crate) fn is_exhausted(&self) -> bool {
+        self.curr_budget == 0
+    }
+
+    pub(crate) fn refill(&mut self) {
+        self.curr_budget = self.default;
+    }
+
+    pub(crate) fn consume(&mut self) -> bool {
+        if self.is_exhausted() {
+            return false;
+        }
+        self.curr_budget = self.curr_budget.saturating_sub(1);
+        true
+    }
+}
 
 pub fn get_highest_qc_from_votes<'a>(
     votes: &Vec<&'a HotStuffMessage>,

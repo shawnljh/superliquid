@@ -9,6 +9,7 @@ use tokio::{
 };
 
 use crate::{
+    hotstuff::message::HotStuffEnvelope,
     networking::message_protocol::{self, AppMessage, ControlMessage, send_ack},
     node::{
         client::handler::handle_transaction,
@@ -46,6 +47,7 @@ pub(super) async fn handle_peer_connection(
     node: &Arc<Node>,
     reader: Arc<Mutex<OwnedReadHalf>>,
     to_replica_tx: mpsc::Sender<ReplicaInBound>,
+    to_replica_concensus_tx: mpsc::Sender<HotStuffEnvelope>,
 ) -> Result<()> {
     let logger = node.logger.clone();
 
@@ -53,8 +55,8 @@ pub(super) async fn handle_peer_connection(
         let message = message_protocol::receive_message(reader.clone()).await;
         match message {
             Ok(Some(Message::HotStuff(hot_stuff_message))) => {
-                to_replica_tx
-                    .send(ReplicaInBound::HotStuff(hot_stuff_message))
+                to_replica_concensus_tx
+                    .send(hot_stuff_message)
                     .await
                     .map_err(|e| mpsc_error("Send to replica failed", e))?;
             }

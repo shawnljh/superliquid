@@ -23,7 +23,6 @@ pub enum ReplicaOutbound {
 }
 
 pub enum ReplicaInBound {
-    HotStuff(HotStuffEnvelope),
     Transaction(SignedTransaction),
     Query(QueryRequest),
 }
