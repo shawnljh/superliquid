@@ -825,21 +825,29 @@ impl HotStuffReplica {
                         self.advance_view().await?;
                     }
                 }
-                Some(msg) = to_replica_concensus_rx.recv(), if !self.consensus_budget.is_exhausted() => {
-                    self.consensus_budget.consume();
-                    if let Err(e) = self.handle_message(msg).await {
-                        replica_log!(self.node_id, "handle_message failed at view {:?}: {:?}", self.pacemaker.curr_view, e);
+                res = to_replica_concensus_rx.recv(), if !self.consensus_budget.is_exhausted() => {
+                    match res {
+                        Some(msg) => {
+                        self.consensus_budget.consume();
+                        if let Err(e) = self.handle_message(msg).await {
+                            replica_log!(self.node_id, "handle_message failed at view {:?}: {:?}", self.pacemaker.curr_view, e);
+                            }
+                        }
+                        None => panic!("Consensus channel between replica and networking thread closed unexceptedly"),
                     }
                 }
-                Some(msg) = to_replica_rx.recv() => {
-                    self.consensus_budget.refill();
-                    match msg {
-                        ReplicaInBound::Transaction(tx) => self.handle_transaction(tx),
-                        ReplicaInBound::Query(query) => self.handle_query(query),
+                res = to_replica_rx.recv() => {
+                    match res {
+                        Some(msg) => {
+                            self.consensus_budget.refill();
+                            match msg {
+                                ReplicaInBound::Transaction(tx) => self.handle_transaction(tx),
+                                ReplicaInBound::Query(query) => self.handle_query(query),
+                            }
+                        }
+                        None => panic!("Inbound channel between replica and networking thread closed unexceptedly"),
                     }
                 },
-
-
             }
         }
     }

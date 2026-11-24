@@ -23,9 +23,11 @@ async fn main() {
     }
 
     let ports: Vec<u16> = (0..num_nodes).map(|i| base_port + (i as u16)).collect();
+    let client_ports: Vec<u16> = (0..num_nodes).map(|i| client_port + (i as u16)).collect();
     let curr_port = ports[node_index];
+    let cli_port = client_ports[node_index];
     let consensus_addr = format!("{}:{}", ip, curr_port);
-    let client_addr = format!("{}:{}", ip, client_port);
+    let client_addr = format!("{}:{}", ip, cli_port);
 
     let peers = ports
         .iter()

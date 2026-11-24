@@ -1,16 +1,13 @@
-use futures::future::join_all;
 use tokio::{
     net::TcpStream,
     sync::{Mutex, RwLock, mpsc},
+    task::{Id, JoinSet},
     time::sleep,
 };
 
 use crate::{
     config,
-    hotstuff::{
-        message::{HotStuffEnvelope, HotStuffMessage},
-        replica::HotStuffReplica,
-    },
+    hotstuff::{message::HotStuffEnvelope, replica::HotStuffReplica},
     networking::message_protocol::send_hello,
     types::message::{ReplicaInBound, ReplicaOutbound},
 };
@@ -36,6 +33,7 @@ async fn spawn_all_node_tasks(
     node: Arc<Node>,
     from_replica_rx: mpsc::Receiver<ReplicaOutbound>,
 ) -> Result<()> {
+    let logger = node.logger.clone();
     // Sends messages to hotsutff replica from networking thread
     let (to_replica_tx, to_replica_rx): (
         mpsc::Sender<ReplicaInBound>,
@@ -48,29 +46,53 @@ async fn spawn_all_node_tasks(
         mpsc::Receiver<HotStuffEnvelope>,
     ) = mpsc::channel(1024);
 
-    let handles = vec![
-        tokio::spawn(run_client_listener(
-            client_addr.to_owned(),
-            node.clone(),
-            to_replica_tx.clone(),
-        )),
-        tokio::spawn(run_peer_listener(
-            node.clone(),
-            consensus_addr.to_owned(),
-            to_replica_tx.clone(),
-            to_replica_consensus_tx.clone(),
-        )),
-    ];
+    let mut set = JoinSet::new();
+    let mut names: HashMap<Id, &'static str> = HashMap::new();
+    let h = set.spawn(run_client_listener(
+        client_addr.to_owned(),
+        node.clone(),
+        to_replica_tx.clone(),
+    ));
+    names.insert(h.id(), "client_listener");
 
-    tokio::spawn(async move {
+    let h = set.spawn(run_peer_listener(
+        node.clone(),
+        consensus_addr.to_owned(),
+        to_replica_tx.clone(),
+        to_replica_consensus_tx.clone(),
+    ));
+    names.insert(h.id(), "peeer_listener");
+
+    let h = set.spawn(async move {
         replica
             .run_replica(to_replica_rx, to_replica_consensus_rx)
             .await
     });
-    tokio::spawn(handle_replica_outbound(from_replica_rx, node.clone()));
+    names.insert(h.id(), "run_replica");
 
-    let _ = join_all(handles).await;
-    Ok(())
+    let h = set.spawn(handle_replica_outbound(from_replica_rx, node.clone()));
+    names.insert(h.id(), "replica_outbound");
+
+    tokio::select! {
+        Some(res) = set.join_next_with_id() => {
+            let (id, outcome) = match res {
+                Ok((id, out)) => (id, Ok(out)),
+                Err(e) => (e.id(), Err(e)),
+            };
+            let name = names.get(&id).copied().unwrap_or("unknown");
+            logger.log(
+                    "info",
+                    &format!("task {} {:?}", name, outcome),
+                );
+
+            set.abort_all();
+            Err(std::io::Error::other("node task exited unexpectedly"))
+        }
+        _ = tokio::signal::ctrl_c() => {
+                set.abort_all();
+                Ok(())
+            }
+    }
 }
 
 // It is possible for two nodes to establish connections with one another,
@@ -189,12 +211,6 @@ pub async fn run_node(
     let (from_replica_tx, from_replica_rx): (
         mpsc::Sender<ReplicaOutbound>,
         mpsc::Receiver<ReplicaOutbound>,
-    ) = mpsc::channel(1024);
-
-    // Recieves consensus messages to hotsutff replica from networking thread
-    let (from_replica_consensus_tx, from_replica_consensus_rx): (
-        mpsc::Sender<HotStuffEnvelope>,
-        mpsc::Receiver<HotStuffEnvelope>,
     ) = mpsc::channel(1024);
 
     let replica = HotStuffReplica::new(node_index, from_replica_tx);
