@@ -81,10 +81,6 @@ impl Pacemaker {
         true
     }
 
-    pub(crate) fn current_leader(&self) -> usize {
-        self.replica_ids[(self.curr_view as usize) % self.replica_ids.len()]
-    }
-
     pub(crate) fn get_leader_for_curr_view(&self) -> usize {
         self.replica_ids[(self.curr_view as usize) % self.replica_ids.len()]
     }
@@ -196,7 +192,7 @@ mod tests {
         for i in 0..total_replicas * 2 {
             pacemaker.curr_view = i as u64;
             let expected_leader = pacemaker.replica_ids[i % total_replicas];
-            assert_eq!(pacemaker.current_leader(), expected_leader);
+            assert_eq!(pacemaker.get_leader_for_curr_view(), expected_leader);
         }
     }
 

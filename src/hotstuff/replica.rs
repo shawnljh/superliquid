@@ -655,7 +655,7 @@ impl HotStuffReplica {
             // );
             self.view_progress.reset();
             // advance view if view is behind
-            let is_leader = self.pacemaker.current_leader() == self.node_id;
+            let is_leader = self.pacemaker.get_leader_for_curr_view() == self.node_id;
             if is_leader {
                 // Send new-view msg to self
                 let new_view_msg: HotStuffMessage = self.create_new_view();
@@ -667,7 +667,7 @@ impl HotStuffReplica {
 
         self.messages.push(msg.clone(), sender);
 
-        let leader = self.pacemaker.current_leader();
+        let leader = self.pacemaker.get_leader_for_curr_view();
         let is_leader = self.node_id == leader;
         let curr_view = self.pacemaker.curr_view;
 
@@ -771,7 +771,7 @@ impl HotStuffReplica {
     }
 
     async fn send_new_view_to_leader(&mut self) -> Result<(), std::io::Error> {
-        let leader = self.pacemaker.current_leader();
+        let leader = self.pacemaker.get_leader_for_curr_view();
         let outbound_msg = self.create_new_view();
 
         if self.node_id == leader {
@@ -801,6 +801,8 @@ impl HotStuffReplica {
     ) -> Result<(), std::io::Error> {
         replica_log!(self.node_id, "Running replica...");
         loop {
+            // Consume messages to self, wont be blocking as there is at most 2 message to self per
+            // view
             while let Some(msg) = self.self_messages.pop_front() {
                 let envelope = HotStuffEnvelope {
                     from: self.node_id,
@@ -810,9 +812,11 @@ impl HotStuffReplica {
             }
 
             // Refresh pacemaker timer dynamically each loop
+            // PERF: could reuse one pinned Sleep and `reset` it, but the deadline changes in
+            // several places (view changes, view sync, commits). Recreating it each iteration
+            // is always correct, and the cost is negligible next to message handling.
             let time_remaining = self.pacemaker.time_remaining();
             let pacemaker_timer = sleep(time_remaining);
-            pin!(pacemaker_timer);
 
             if self.consensus_budget.is_exhausted() && to_replica_rx.is_empty() {
                 self.consensus_budget.refill();
@@ -820,7 +824,7 @@ impl HotStuffReplica {
 
             tokio::select! {
                 biased;
-                _ = &mut pacemaker_timer => {
+                _ = pacemaker_timer => {
                     if self.pacemaker.should_advance_view() {
                         self.advance_view().await?;
                     }
